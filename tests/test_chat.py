@@ -18,6 +18,18 @@ def test_parse_experience_extracts_tags() -> None:
     assert arg.tags == ["threat", "alarm"]
 
 
+def test_default_persist_path_is_in_project_memory_folder() -> None:
+    from pathlib import Path
+
+    from sentiance.chat import default_persist_path
+
+    p = Path(default_persist_path(Settings(agent_name="Aria")))
+    assert p.parent.name == "memory"  # kept with the project, not in home
+    assert p.name == "aria.json"
+    # An explicit override still wins.
+    assert default_persist_path(Settings(persist_path="x/y.json")) == "x/y.json"
+
+
 def test_parse_commands() -> None:
     assert parse_line("") == ("idle", 1)
     assert parse_line(":quit") == ("quit", None)

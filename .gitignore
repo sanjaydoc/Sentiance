@@ -28,6 +28,9 @@ htmlcov/
 .env.*
 !.env.example
 
+# The mind's persisted memory (kept local, never committed)
+memory/
+
 # IDE / editor
 .idea/
 .vscode/

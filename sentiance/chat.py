@@ -66,10 +66,12 @@ _HELP = (
 
 
 def default_persist_path(settings: Settings) -> str:
-    """Where this named mind's memory lives across runs."""
+    """Where this named mind's memory lives across runs — a ``memory/`` folder in
+    the current working directory (i.e. alongside the project), so her state
+    stays with the project rather than in your home directory."""
     if settings.persist_path:
         return settings.persist_path
-    return str(Path.home() / ".sentiance" / f"{settings.agent_name.lower()}.json")
+    return str(Path("memory") / f"{settings.agent_name.lower()}.json")
 
 
 def format_tick(result: TickResult) -> str:

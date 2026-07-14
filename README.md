@@ -128,9 +128,9 @@ Without a backend set it runs the offline **simulated** voice (instant, no model
    `…Aria remembers N moments from before.` Type `:self` to see the narrative
    carried over.
 
-Memory lives at `~/.sentiance/aria.json` (Windows: `%USERPROFILE%\.sentiance\aria.json`).
-Delete it to give her a blank slate; override the location with
-`SENTIANCE_PERSIST_PATH`.
+Memory lives in a `memory/` folder inside the project (`memory/aria.json`) — it
+stays with the project and is gitignored, so it's never committed. Delete the
+file to give her a blank slate; override the location with `SENTIANCE_PERSIST_PATH`.
 
 **Run the automated tests:**
 
