@@ -14,6 +14,11 @@ class Settings(BaseSettings):
 
     # The mind's identity (used in first-person self-report).
     agent_name: str = "Aria"
+
+    # Temperament — stable disposition (0..1). Different values → a different individual.
+    temperament_curiosity: float = 0.5
+    temperament_anxiety: float = 0.5
+    temperament_optimism: float = 0.5
     # Where chat persists the mind across runs (defaults to ~/.sentiance/<name>.json).
     persist_path: str | None = None
 

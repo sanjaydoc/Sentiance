@@ -42,6 +42,7 @@ from sentiance.mind.state import (
     SelfModelState,
     Stimulus,
 )
+from sentiance.mind.temperament import Needs, Temperament
 from sentiance.mind.util import clamp, strip_narration
 from sentiance.mind.workspace import GlobalWorkspace
 from sentiance.mind.world_model import WorldModel
@@ -79,6 +80,12 @@ class Mind:
         self.metacognition = Metacognition()
         self.goals = GoalSystem()
         self.relationships = RelationshipSystem()
+        self.temperament = Temperament(
+            curiosity=self.settings.temperament_curiosity,
+            anxiety=self.settings.temperament_anxiety,
+            optimism=self.settings.temperament_optimism,
+        )
+        self.needs = Needs()
         self.cognition = cognition or build_cognition(self.settings)
 
         self.affect = AffectState()
@@ -142,6 +149,7 @@ class Mind:
         from sentiance.mind.consolidation import consolidate  # noqa: PLC0415 - cycle
 
         added = self.self_model.add_beliefs(consolidate(self.memory))
+        self.needs.rest_now()  # a night's rest
         mv = self.affect.mood_valence
         self.affect = AffectState(
             valence=round(mv * 0.4, 3),
@@ -191,13 +199,29 @@ class Mind:
         if prior is not None and percept.valence_hint is None:
             percept = percept.model_copy(update={"valence_hint": round(prior, 3)})
 
-        # 2. Appraise against drives, then 3. feel.
+        # 2. Appraise against drives, shaped by temperament + the pressure of any
+        #    unmet needs, then 3. feel.
         self._appraisal, self._dominant_drive = self.drives.appraise(percept)
+        self._appraisal = self.temperament.shape(self._appraisal)
+        self._appraisal = self._appraisal.model_copy(
+            update={
+                "goal_congruence": clamp(
+                    self._appraisal.goal_congruence + 0.5 * self.needs.pressure(), -1.0, 1.0
+                )
+            }
+        )
         self.affect = self.affect_system.appraise(percept, self._appraisal, self.affect)
 
-        # 3b. Fold how this encounter felt back into each person's model.
+        # 3b. Fold how this encounter felt into each person's model, and let the
+        #     moment deplete/replenish the homeostatic needs.
         if people:
             self.relationships.record(people, self.affect.valence, self.tick_no)
+        self.needs.step(
+            novelty=percept.novelty,
+            arousal=self.affect.arousal,
+            social=bool(people),
+            valence=self.affect.valence,
+        )
 
         # 4. Attention competition over candidate contents.
         winner, also = self.attention.select(self._candidates(percept), self.affect.arousal)

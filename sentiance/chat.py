@@ -95,6 +95,11 @@ def _print_self(mind: Mind) -> None:
     print(f"  focus:     {s.current_focus}")
     print(f"  mood:      valence {s.affect.mood_valence:+.2f}, arousal {s.affect.mood_arousal:.2f}")
     print("  drives:    {" + drives + "}")
+    n, t = mind.needs, mind.temperament
+    print(f"  needs:     rest {n.rest:.2f}, stimulation {n.stimulation:.2f}, "
+          f"connection {n.connection:.2f}")
+    print(f"  temperament: curiosity {t.curiosity:.2f}, anxiety {t.anxiety:.2f}, "
+          f"optimism {t.optimism:.2f}")
     if s.goals:
         print("  goals:     " + "; ".join(s.goals))
     if s.beliefs:
