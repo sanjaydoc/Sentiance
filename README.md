@@ -248,13 +248,32 @@ python -m pytest -k "volition or anticipation"                  # self-control +
 python -m pytest -k "imagination or curiosity or temperament"   # foresight, curiosity, drift
 ```
 
-See a faculty happen live in `chat` (offline voice — no model needed):
+See a faculty happen live in `chat` (offline voice — no model needed). Start it
+with the backend set for your shell:
 
-| OS | Start chat offline |
-| -- | ------------------ |
-| macOS / Linux | `SENTIANCE_COGNITION_BACKEND=simulated python -m sentiance chat` |
-| Windows (cmd) | `set SENTIANCE_COGNITION_BACKEND=simulated` then `python -m sentiance chat` |
-| Windows (PowerShell) | `$env:SENTIANCE_COGNITION_BACKEND="simulated"; python -m sentiance chat` |
+**macOS / Linux (bash/zsh):**
+
+```bash
+SENTIANCE_COGNITION_BACKEND=simulated python -m sentiance chat
+```
+
+**Windows (cmd)** — the inline `VAR=value command` form is bash-only and fails on
+cmd; `set` the variable first (it sticks for the whole window), then run:
+
+```cmd
+set SENTIANCE_COGNITION_BACKEND=simulated
+python -m sentiance chat
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:SENTIANCE_COGNITION_BACKEND="simulated"; python -m sentiance chat
+```
+
+> **Windows note:** paste one command per line, and don't include trailing
+> `# comments` — cmd treats `#` as part of the command and errors. Swap
+> `simulated` for `ollama` (with `ollama serve` running) for her qwen voice.
 
 Then type, in order, to watch **bond → loss → grief**:
 
