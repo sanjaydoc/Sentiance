@@ -34,6 +34,18 @@ class Drives:
         }
 
     def appraise(self, percept: Percept) -> tuple[Appraisal, Drive]:
+        """Appraise an event *and* let it move the drives (homeostasis)."""
+        appraisal, dominant, contributions, threat = self._read(percept)
+        self._apply(contributions, percept.novelty, threat)
+        return appraisal, dominant
+
+    def evaluate(self, percept: Percept) -> tuple[Appraisal, Drive]:
+        """Appraise without any homeostatic side effect — a pure read, safe for
+        *imagining* a hypothetical moment the mind isn't actually living."""
+        appraisal, dominant, _contributions, _threat = self._read(percept)
+        return appraisal, dominant
+
+    def _read(self, percept: Percept) -> tuple[Appraisal, Drive, dict[Drive, float], float]:
         tags = {t.lower() for t in percept.tags}
         threat = percept.intensity if tags & _THREAT_TAGS else 0.0
         pleasant = tags & _PLEASANT_TAGS
@@ -62,7 +74,6 @@ class Drives:
         relevance = clamp(max(abs(v) for v in contributions.values()))
         control = clamp(0.75 - 0.6 * threat + 0.15 * self.levels[Drive.SAFETY] - 0.3 * novelty)
 
-        self._apply(contributions, novelty, threat)
         return (
             Appraisal(
                 novelty=novelty,
@@ -71,6 +82,8 @@ class Drives:
                 relevance=relevance,
             ),
             dominant,
+            contributions,
+            threat,
         )
 
     def decay(self, rate: float = 0.05) -> None:

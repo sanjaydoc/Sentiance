@@ -24,6 +24,7 @@ from sentiance.mind.cognition import Cognition, build_cognition
 from sentiance.mind.drives import Drives
 from sentiance.mind.embeddings import build_embedder
 from sentiance.mind.goals import GoalSystem
+from sentiance.mind.imagination import Imagination, Prospect
 from sentiance.mind.memory import Memory
 from sentiance.mind.metacognition import Metacognition
 from sentiance.mind.perception import Perceptor
@@ -86,6 +87,9 @@ class Mind:
             optimism=self.settings.temperament_optimism,
         )
         self.needs = Needs()
+        self.imagination = Imagination(
+            self.perceptor, self.drives, self.affect_system, self.temperament
+        )
         self.cognition = cognition or build_cognition(self.settings)
 
         self.affect = AffectState()
@@ -159,6 +163,12 @@ class Mind:
             mood_arousal=round(self.affect.mood_arousal * 0.6, 3),
         )
         return added
+
+    def foresee(self, options: list[tuple[str, Stimulus]]) -> list[Prospect]:
+        """Imagine each ``(label, hypothetical)`` option and rank them by how
+        appealing the anticipated moment feels — a forward model that mutates
+        nothing. The mind can then choose the future it expects to like best."""
+        return self.imagination.imagine(options, self.world, self.affect)
 
     def state(self) -> SelfModelState:
         return self._snapshot()
