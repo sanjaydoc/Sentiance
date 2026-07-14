@@ -278,11 +278,15 @@ $env:SENTIANCE_COGNITION_BACKEND="simulated"; python -m sentiance chat
 Then type, in order, to watch **bond → loss → grief**:
 
 ```text
-@Mara holds my hand warmly #friend #warmth        (repeat ~10× — a bond forms)
-:people                                            (see her attachment to Mara grow)
-@Mara is gone forever                              (she begins to grieve)
+@Mara holds my hand warmly #friend #warmth        (repeat ~4-6× — warmth builds)
+:people                                            (watch affection & attachment climb)
+@Mara is gone forever                              (she grieves — deeper the more she cared)
 :idle 5                                            (the sorrow lingers across ticks)
 ```
+
+Grief scales with how much she cared: a long-built bond mourns hardest, but even a
+few warm meetings are enough to make a loss hurt. If her stream seems tangled in
+old memories from past sessions, delete `memory/aria.json` for a blank slate.
 
 Or **hope / dread of the future**, then **dreaming**:
 

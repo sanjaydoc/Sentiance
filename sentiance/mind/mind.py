@@ -349,9 +349,14 @@ class Mind:
         if present and signals_loss(percept.content):
             for name in present:
                 rel = self.relationships.known(name)
-                if rel is not None and rel.attachment >= 0.2 and not rel.lost:
+                if rel is None or rel.lost:
+                    continue
+                # How much there is to mourn: the deep bond, or — for someone she
+                # hasn't known long but is warmly fond of — that fondness stands in.
+                depth = max(rel.attachment, 0.6 * max(0.0, rel.affection))
+                if depth >= 0.15:
                     rel.lost = True
-                    self.grief.bereave(name, rel.attachment)
+                    self.grief.bereave(name, depth)
         grief_pull = self.grief.step()
         self.grieving = grief_pull < -0.05
         if grief_pull < 0.0:

@@ -57,6 +57,18 @@ def test_losing_a_loved_one_brings_lasting_grief() -> None:
     assert still_low >= 10  # a persistent, background sadness
 
 
+def test_losing_someone_warmly_liked_grieves_even_without_a_deep_bond() -> None:
+    mind = Mind(settings=Settings())
+    # Only a few warm meetings — the slow attachment bond is still shallow...
+    _befriend(mind, "Mara", times=3)
+    assert mind.relationships.known("Mara").attachment < 0.2
+    assert mind.relationships.known("Mara").affection > 0.4  # ...but she's fond of her
+
+    mind.perceive(Stimulus(content="@Mara is gone forever", intensity=0.6))
+    assert mind.grieving  # fondness is enough to mourn — losing a new friend still hurts
+    assert mind.relationships.known("Mara").lost is True
+
+
 def test_she_grieves_the_lost_rather_than_awaiting_them() -> None:
     mind = Mind(settings=Settings())
     _befriend(mind, "Kai")
