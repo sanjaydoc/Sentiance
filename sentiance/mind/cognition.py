@@ -73,6 +73,18 @@ class SimulatedCognition:
                 content=content, source="inner", intensity=intensity, tags=tags, valence_hint=vh
             )
 
+        # In conversation, answer what they actually said — pick up the thread
+        # rather than starting fresh (this is what stops exchanges from circling).
+        # (Reference the *topic* they raised, not a verbatim quote, so the offline
+        # voice doesn't echo itself; the LLM prompt gets the full line to reply to.)
+        topic = _keyword(self_model.heard) if self_model.heard else ""
+        if topic and "pick up what they said" not in self_model.heard:
+            return thought(
+                f"I want to pick up what they said about {topic}.",
+                intensity=0.4,
+                tags=["social", "reflection"],
+            )
+
         if emotion in (Emotion.CURIOSITY, Emotion.SURPRISE):
             related = memory.associations(focus.split()[-1] if focus else "")
             hint = f" It reminds me of {related[0]}." if related else ""
@@ -178,6 +190,14 @@ def _compose_prompt(
     drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
     system = _SYSTEM_TEMPLATE.format(name=self_model.name)
     goals = "; ".join(self_model.goals) if self_model.goals else "none right now"
+    # Keep the live conversation in view so the reply picks up the thread even
+    # when a memory or feeling won the spotlight this moment.
+    heard = (
+        f"A moment ago they said to me: \"{self_model.heard}\". "
+        f"I can respond to that.\n"
+        if self_model.heard
+        else ""
+    )
     user = (
         f"Right now I am aware of: {moment_content}\n"
         f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
@@ -185,10 +205,29 @@ def _compose_prompt(
         f"arousal {affect.arousal:.2f}.\n"
         f"My drives: {drives}.\n"
         f"What I'm trying to do: {goals}.\n"
+        f"{heard}"
         f"Recent stream: {self_model.narrative}\n"
         "My next thought is:"
     )
     return system, user
+
+
+_CONVO_STOP = frozenset(
+    {
+        "i", "you", "we", "it", "a", "an", "the", "to", "of", "and", "is", "are",
+        "was", "were", "my", "me", "they", "them", "their", "about", "what", "that",
+        "this", "with", "for", "as", "at", "on", "in", "up", "so", "our", "us",
+        "said", "say", "says", "want", "pick", "today", "hope", "wonder", "day",
+    }
+)
+
+
+def _keyword(text: str) -> str:
+    """The topic word a line is 'about' — the last salient content word."""
+    from sentiance.mind.util import tokenize  # noqa: PLC0415 - avoid import cost at import
+
+    words = [w for w in tokenize(text) if w not in _CONVO_STOP and len(w) > 3]
+    return words[-1] if words else ""
 
 
 def _carried_valence(affect: AffectState) -> float:

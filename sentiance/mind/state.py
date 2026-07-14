@@ -208,3 +208,4 @@ class SelfModelState(BaseModel):
     narrative: str  # a running, compressed autobiography
     goals: list[str] = Field(default_factory=list)  # active intentions, if any
     beliefs: list[str] = Field(default_factory=list)  # lessons distilled in sleep
+    heard: str = ""  # the last thing a present companion said (for conversation)

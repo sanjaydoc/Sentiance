@@ -23,6 +23,7 @@ from sentiance.mind.anticipation import Anticipation
 from sentiance.mind.attention import AttentionSystem
 from sentiance.mind.cognition import Cognition, build_cognition
 from sentiance.mind.conscience import Conscience, SelfJudgment
+from sentiance.mind.conversation import SAYS_RE, Conversation
 from sentiance.mind.curiosity import Curiosity
 from sentiance.mind.drives import Drives
 from sentiance.mind.embeddings import build_embedder
@@ -103,6 +104,7 @@ class Mind:
         self.grief = Grief()
         self.volition = Volition()
         self.anticipation = Anticipation()
+        self.conversation = Conversation()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -122,6 +124,7 @@ class Mind:
         self.last_dream: object | None = None  # the last dream she had, for the UI
         self.last_effort: bool = False  # she held focus by will this tick, for the UI
         self.last_anticipation: tuple[str, Emotion] | None = None  # what she awaits, for the UI
+        self._companion: str | None = None  # who she's talking with this tick
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -240,6 +243,8 @@ class Mind:
         """Self-model snapshot with active goals folded in (used by cognition)."""
         s = self.self_model.snapshot()
         s.goals = self.goals.descriptions()
+        if self._companion is not None:
+            s.heard = self.conversation.last(self._companion) or ""
         return s
 
     def save(self, path: str) -> None:
@@ -272,6 +277,12 @@ class Mind:
         # could never miss anyone, since remembering them would summon them.
         people = [p for p in extract_people(percept.content) if p != self.self_model.name]
         present = [] if percept.internal else people
+        self._companion = present[0] if present else None
+        # Remember what a companion actually *said*, so the thread stays in view.
+        if not percept.internal:
+            said = SAYS_RE.search(percept.content)
+            if said and said.group(1) != self.self_model.name:
+                self.conversation.heard(said.group(1), said.group(2))
         prior = self.relationships.prior(people)
         if prior is not None and percept.valence_hint is None:
             percept = percept.model_copy(update={"valence_hint": round(prior, 3)})
