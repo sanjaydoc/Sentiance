@@ -25,6 +25,7 @@ from sentiance.mind.conscience import Conscience, SelfJudgment
 from sentiance.mind.curiosity import Curiosity
 from sentiance.mind.drives import Drives
 from sentiance.mind.embeddings import build_embedder
+from sentiance.mind.frustration import Frustration
 from sentiance.mind.goals import GoalSystem
 from sentiance.mind.imagination import Imagination, Prospect
 from sentiance.mind.memory import Memory
@@ -92,6 +93,7 @@ class Mind:
         self.needs = Needs()
         self.curiosity = Curiosity()
         self.conscience = Conscience()
+        self.frustration = Frustration()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -104,6 +106,7 @@ class Mind:
         self.last_goal_events: list[tuple[str, object]] = []  # for the UI to announce
         self.last_curiosity: tuple[str, float] | None = None  # an "aha", for the UI
         self.last_self_judgment: SelfJudgment | None = None  # pride/disappointment
+        self.last_anger: bool = False  # frustration boiled over this tick, for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -264,6 +267,27 @@ class Mind:
             control=self._appraisal.control,
         )
 
+        # 3d. Frustration & anger: an intention that keeps being blocked stokes
+        #     frustration; once it boils over, a bad blocked moment becomes anger
+        #     — unpleasant and activating, but oriented toward pushing back rather
+        #     than withdrawing — and it re-charges the thwarted goal (persistence).
+        self.last_anger = False
+        self.frustration.update(
+            has_goal=bool(self.goals.active()),
+            goal_congruence=self._appraisal.goal_congruence,
+        )
+        if self.frustration.angry and self.affect.valence < 0.0:
+            self.affect = self.affect.model_copy(
+                update={
+                    "emotion": Emotion.ANGER,
+                    "arousal": clamp(self.affect.arousal + 0.15),
+                }
+            )
+            top = self.goals.top()
+            if top is not None:
+                top.urgency = clamp(top.urgency + 0.2)  # anger fuels the pursuit
+            self.last_anger = True
+
         # 4. Attention competition over candidate contents.
         winner, also = self.attention.select(self._candidates(percept), self.affect.arousal)
         moment = ConsciousMoment(
@@ -290,6 +314,9 @@ class Mind:
         # 6b. Self-conscious feeling: measure her conduct against her own
         #     standards. Following through breeds pride; letting go, disappointment.
         #     This reflective appraisal colours the feeling she carries onward.
+        if any(event == "resolved" for event, _ in self.last_goal_events):
+            self.frustration.relieve()  # getting through vents the pressure
+
         self.last_self_judgment = self.conscience.judge(self.last_goal_events)
         if self.last_self_judgment is not None:
             j = self.last_self_judgment

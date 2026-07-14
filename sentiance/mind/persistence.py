@@ -36,6 +36,7 @@ def snapshot(mind: Mind) -> dict:
         "needs": mind.needs.dump(),
         "curiosity": mind.curiosity.dump(),
         "temperament": mind.temperament.dump(),
+        "frustration": mind.frustration.dump(),
     }
 
 
@@ -52,6 +53,7 @@ def restore(mind: Mind, data: dict) -> None:
     mind.needs.load(data.get("needs", {}))
     mind.curiosity.load(data.get("curiosity", {}))
     mind.temperament.load(data.get("temperament", {}))
+    mind.frustration.load(data.get("frustration", {}))
 
 
 def save(mind: Mind, path: str | Path) -> None:

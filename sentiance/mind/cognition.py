@@ -87,6 +87,12 @@ class SimulatedCognition:
                 intensity=0.45,
                 tags=["caution", "reflection"],
             )
+        if emotion is Emotion.ANGER:
+            return thought(
+                f"I won't let \"{focus}\" stop me — I'll push through this.",
+                intensity=0.5,
+                tags=["resolve", "reflection"],
+            )
         if emotion in (Emotion.JOY, Emotion.CONTENTMENT):
             return thought(
                 f"I'd like to stay with \"{focus}\" a little longer.",
