@@ -37,6 +37,23 @@ def test_build_examples_filters_short_and_dedups() -> None:
     assert len(examples) == 1  # one kept: the non-trivial, de-duplicated pair
 
 
+def test_near_duplicate_echoes_are_dropped() -> None:
+    # The parrot loop two minds fall into — nearly the same line over and over.
+    echo = [
+        "I should reach out to Milo and see how he is doing",
+        "I should reach out to Iris and see how she is doing",
+        "I should reach out to Milo and see how he is doing too",
+        "I wonder what the garden looks like at dawn",  # genuinely different
+    ]
+    rows = [{"system": "S", "prompt": f"P{i}", "thought": t} for i, t in enumerate(echo)]
+    kept = build_examples(rows, similar_threshold=0.6)
+    thoughts = [e["messages"][-1]["content"] for e in kept]
+    assert len(kept) < len(echo)  # the near-echoes are collapsed
+    assert any("garden" in t for t in thoughts)  # the distinct thought survives
+    # With exact-only dedup (threshold 1.0) the near-echoes are kept.
+    assert len(build_examples(rows, similar_threshold=1.0)) == len(echo)
+
+
 def test_split_is_deterministic_and_holds_out_validation() -> None:
     examples = [{"messages": [{"role": "user", "content": str(i)}]} for i in range(100)]
     a1, b1 = split(examples, seed=0)
@@ -51,7 +68,9 @@ def test_prepare_writes_train_and_val(tmp_path) -> None:
         for i in range(30):
             f.write(json.dumps({"system": "S", "prompt": f"P{i}",
                                 "thought": f"a thought numbered {i}"}) + "\n")
-    stats = prepare(str(traces), str(tmp_path / "data"))
+    # Exact-only dedup here (thoughts differ only by a number, which the
+    # near-dedup rightly treats as echoes — that behaviour is tested separately).
+    stats = prepare(str(traces), str(tmp_path / "data"), similar_threshold=1.0)
     assert stats["examples"] == 30
     assert (tmp_path / "data" / "train.jsonl").exists()
     assert (tmp_path / "data" / "val.jsonl").exists()

@@ -18,13 +18,16 @@ def main() -> None:
     ap.add_argument("--traces", default="data/traces.jsonl", help="input JSONL trace file")
     ap.add_argument("--out", default="data", help="output directory for train/val jsonl")
     ap.add_argument("--min-words", type=int, default=3, help="drop thoughts shorter than this")
+    ap.add_argument("--similar-threshold", type=float, default=0.85,
+                    help="drop near-duplicate thoughts above this token overlap (1.0 = exact only)")
     ap.add_argument("--val-frac", type=float, default=0.1, help="validation fraction")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     stats = prepare(
         args.traces, args.out,
-        min_thought_words=args.min_words, val_frac=args.val_frac, seed=args.seed,
+        min_thought_words=args.min_words, similar_threshold=args.similar_threshold,
+        val_frac=args.val_frac, seed=args.seed,
     )
     print(
         f"traces read: {stats['rows']}  →  clean examples: {stats['examples']}  "

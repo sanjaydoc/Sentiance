@@ -51,12 +51,16 @@ def test_housemates_reference_what_each_other_said() -> None:
     from sentiance.society import Society, _cast
 
     society = Society(_cast())
+    # The offline voice takes up a companion's topic in one of several rotated
+    # forms (rotation is what stops them echoing) — any of them counts.
+    markers = ("pick up what they said", "really mean about",
+               "stirs a thought of my own about", "ask them more about")
     referenced = False
     for _ in range(16):
         for _who, _affect, _perceived, _notes in society.step():
             pass
         if any(
-            i.last_utterance and "pick up what they said" in i.last_utterance
+            i.last_utterance and any(m in i.last_utterance for m in markers)
             for i in society.inhabitants
         ):
             referenced = True

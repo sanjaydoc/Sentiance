@@ -11,7 +11,22 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", text.lower()).strip(" .!?,\"'")
+
+
+def _token_set(text: str) -> frozenset[str]:
+    return frozenset(re.findall(r"[a-z']+", text.lower()))
+
+
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
+    if not a and not b:
+        return 0.0
+    return len(a & b) / len(a | b)
 
 
 def load_traces(path: str | Path) -> list[dict]:
@@ -49,11 +64,18 @@ def build_examples(
     *,
     min_thought_words: int = 3,
     dedup: bool = True,
+    similar_threshold: float = 0.85,
+    window: int = 300,
 ) -> list[dict]:
     """Clean trace rows into chat examples: drop empties / trivially short
-    thoughts, and (by default) de-duplicate identical prompt→thought pairs."""
+    thoughts, exact duplicates, and — the important one for conversation data —
+    **near**-duplicate thoughts (minds echoing each other), so the trained model
+    doesn't learn to parrot. ``similar_threshold`` is the token-overlap (Jaccard)
+    above which a thought counts as a near-echo of a recent one; set it to 1.0 to
+    keep only exact-duplicate filtering."""
     examples: list[dict] = []
-    seen: set[tuple[str, str]] = set()
+    seen_norm: set[str] = set()
+    recent: list[frozenset[str]] = []
     for row in rows:
         thought = (row.get("thought") or "").strip()
         if len(thought.split()) < min_thought_words:
@@ -62,10 +84,16 @@ def build_examples(
         if example is None:
             continue
         if dedup:
-            key = ((row.get("prompt") or "").strip(), thought)
-            if key in seen:
+            norm = _norm(thought)
+            if norm in seen_norm:
                 continue
-            seen.add(key)
+            tokens = _token_set(thought)
+            if similar_threshold < 1.0 and any(
+                _jaccard(tokens, prev) >= similar_threshold for prev in recent[-window:]
+            ):
+                continue
+            seen_norm.add(norm)
+            recent.append(tokens)
         examples.append(example)
     return examples
 
@@ -91,12 +119,15 @@ def prepare(
     out_dir: str | Path = "data",
     *,
     min_thought_words: int = 3,
+    similar_threshold: float = 0.85,
     val_frac: float = 0.1,
     seed: int = 0,
 ) -> dict:
     """Full pipeline: traces → cleaned examples → train/val files. Returns stats."""
     rows = load_traces(traces_path)
-    examples = build_examples(rows, min_thought_words=min_thought_words)
+    examples = build_examples(
+        rows, min_thought_words=min_thought_words, similar_threshold=similar_threshold
+    )
     train, val = split(examples, val_frac=val_frac, seed=seed)
     out = Path(out_dir)
     write_jsonl(train, out / "train.jsonl")

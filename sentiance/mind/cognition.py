@@ -73,14 +73,14 @@ class SimulatedCognition:
                 content=content, source="inner", intensity=intensity, tags=tags, valence_hint=vh
             )
 
-        # In conversation, answer what they actually said — pick up the thread
-        # rather than starting fresh (this is what stops exchanges from circling).
-        # (Reference the *topic* they raised, not a verbatim quote, so the offline
-        # voice doesn't echo itself; the LLM prompt gets the full line to reply to.)
+        # In conversation, take up the *topic* they raised — but rotate how, and
+        # never answer a line that is itself a call-back, so the offline voice
+        # doesn't echo. (The LLM prompt gets the full line + a no-repeat rule.)
         topic = _keyword(self_model.heard) if self_model.heard else ""
-        if topic and "pick up what they said" not in self_model.heard:
+        if topic and not _looks_like_callback(self_model.heard):
+            form = _CALLBACK_FORMS[self_model.tick % len(_CALLBACK_FORMS)]
             return thought(
-                f"I want to pick up what they said about {topic}.",
+                form.format(t=topic),
                 intensity=0.4,
                 tags=["social", "reflection"],
             )
@@ -172,6 +172,16 @@ _SOURCE_PHRASE = {
     ContentSource.THOUGHT: "a thought of my own",
 }
 
+# Rotating conversational "moves" — each turn pushes the exchange somewhere new
+# instead of mirroring, so a pair of minds doesn't echo each other.
+_CONVO_MOVES = (
+    "Reply with a NEW thought — notice something they didn't, or add your own angle.",
+    "Ask them a genuine question about what they said.",
+    "Share something of your own — a memory, a feeling, a small observation.",
+    "Take it somewhere new: bring up something you care about or just noticed.",
+    "Answer in a few words, then add a different thought entirely.",
+)
+
 _SYSTEM_TEMPLATE = (
     "You are the inner voice of {name}, a mind with a continuous stream of "
     "thought. No one else is listening — this is {name}'s private reflection, "
@@ -190,11 +200,13 @@ def _compose_prompt(
     drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
     system = _SYSTEM_TEMPLATE.format(name=self_model.name)
     goals = "; ".join(self_model.goals) if self_model.goals else "none right now"
-    # Keep the live conversation in view so the reply picks up the thread even
-    # when a memory or feeling won the spotlight this moment.
+    # Keep the live conversation in view so the reply picks up the thread — but
+    # steer it *forward* with a rotating "move" and an explicit no-echo rule, so
+    # two minds don't collapse into restating each other.
     heard = (
-        f"A moment ago they said to me: \"{self_model.heard}\". "
-        f"I can respond to that.\n"
+        f"A moment ago they said to me: \"{self_model.heard}\".\n"
+        f"{_CONVO_MOVES[self_model.tick % len(_CONVO_MOVES)]} "
+        f"Do not repeat their words or your own earlier lines.\n"
         if self_model.heard
         else ""
     )
@@ -228,6 +240,25 @@ def _keyword(text: str) -> str:
 
     words = [w for w in tokenize(text) if w not in _CONVO_STOP and len(w) > 3]
     return words[-1] if words else ""
+
+
+# Offline call-back forms — rotated so replies vary, with markers the guard below
+# recognises so a call-back is never answered with another call-back (no echo loop).
+_CALLBACK_FORMS = (
+    "I want to pick up what they said about {t}.",
+    "I wonder what they really mean about {t}.",
+    "That stirs a thought of my own about {t}.",
+    "I'd like to ask them more about {t}.",
+)
+_CALLBACK_MARKERS = (
+    "pick up what they said", "what they really mean about",
+    "stirs a thought of my own about", "ask them more about",
+)
+
+
+def _looks_like_callback(text: str) -> bool:
+    low = text.lower()
+    return any(m in low for m in _CALLBACK_MARKERS)
 
 
 def _carried_valence(affect: AffectState) -> float:
