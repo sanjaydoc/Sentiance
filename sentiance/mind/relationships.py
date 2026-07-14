@@ -72,7 +72,7 @@ class RelationshipSystem:
         bond and how long they've been gone — or ``None`` if no one is missed."""
         best: tuple[str, float] | None = None
         for rel in self.people.values():
-            if rel.name in present or rel.attachment < 0.2:
+            if rel.name in present or rel.attachment < 0.2 or rel.lost:
                 continue
             gap = current_tick - rel.last_tick
             if gap < min_absence:

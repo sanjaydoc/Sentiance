@@ -105,6 +105,12 @@ class SimulatedCognition:
                 intensity=0.3,
                 tags=["rumination", "reflection"],
             )
+        if emotion is Emotion.GRIEF:
+            return thought(
+                "There's an ache where they used to be.",
+                intensity=0.3,
+                tags=["grief", "reflection"],
+            )
         if emotion is Emotion.PRIDE:
             return thought(
                 "I'm glad I followed through on what I meant to do.",

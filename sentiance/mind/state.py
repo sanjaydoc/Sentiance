@@ -35,6 +35,7 @@ class Emotion(StrEnum):
     FEAR = "fear"
     ANGER = "anger"
     SADNESS = "sadness"
+    GRIEF = "grief"  # the lasting sorrow of losing someone she was bonded to
     CONFUSION = "confusion"
     # Self-conscious emotions: felt by measuring her conduct against her own
     # standards (the intentions she set, the beliefs she holds).
@@ -188,6 +189,7 @@ class Relationship(BaseModel):
     # Attachment is the slow, sticky depth of the bond — it grows over many warm
     # encounters and lingers through absence (you don't stop loving someone fast).
     attachment: float = Field(0.0, ge=0.0, le=1.0)
+    lost: bool = False  # gone for good — she grieves them rather than awaits them
     first_tick: int = 0
     last_tick: int = 0
 

@@ -28,6 +28,7 @@ from sentiance.mind.embeddings import build_embedder
 from sentiance.mind.empathy import Empathy
 from sentiance.mind.frustration import Frustration
 from sentiance.mind.goals import GoalSystem
+from sentiance.mind.grief import Grief, signals_loss
 from sentiance.mind.imagination import Imagination, Prospect
 from sentiance.mind.memory import Memory
 from sentiance.mind.metacognition import Metacognition
@@ -96,6 +97,7 @@ class Mind:
         self.conscience = Conscience()
         self.frustration = Frustration()
         self.empathy = Empathy()
+        self.grief = Grief()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -111,6 +113,7 @@ class Mind:
         self.last_anger: bool = False  # frustration boiled over this tick, for the UI
         self.longing: tuple[str, float] | None = None  # who she misses, for the UI
         self.last_empathy: tuple[str, float] | None = None  # whose feeling she caught
+        self.grieving: bool = False  # mourning a loss, for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -295,6 +298,26 @@ class Mind:
                     }
                 )
                 self.last_empathy = (present[0], round(other_v, 3))
+
+        # 3b-iii. Loss & grief: if a loved one is named as gone, the bond turns to
+        #         mourning — a sadness deep as the attachment and slow to fade,
+        #         pulling down the passing feeling and the background mood alike.
+        if present and signals_loss(percept.content):
+            for name in present:
+                rel = self.relationships.known(name)
+                if rel is not None and rel.attachment >= 0.2 and not rel.lost:
+                    rel.lost = True
+                    self.grief.bereave(name, rel.attachment)
+        grief_pull = self.grief.step()
+        self.grieving = grief_pull < -0.05
+        if grief_pull < 0.0:
+            self.affect = self.affect.model_copy(
+                update={
+                    "valence": clamp(self.affect.valence + grief_pull, -1.0, 1.0),
+                    "mood_valence": clamp(self.affect.mood_valence + 0.3 * grief_pull, -1.0, 1.0),
+                    "emotion": Emotion.GRIEF if grief_pull < -0.3 else self.affect.emotion,
+                }
+            )
         self.needs.step(
             novelty=percept.novelty,
             arousal=self.affect.arousal,

@@ -140,6 +140,9 @@ def _announce_self_judgment(mind: Mind) -> None:
         name, ov = mind.last_empathy
         mood = "joy" if ov > 0.2 else "sorrow" if ov < -0.2 else "feeling"
         print(f"      (she catches @{name}'s {mood})")
+    if mind.grieving:
+        who = ", ".join(f"@{n}" for n in mind.grief.mourning_for())
+        print(f"      (she is grieving {who})")
 
 
 def _reflect(mind: Mind) -> None:
