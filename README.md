@@ -544,6 +544,42 @@ SENTIANCE_AGENT_NAME=Nova SENTIANCE_TEMPERAMENT_CURIOSITY=0.9 \
   python -m sentiance chat
 ```
 
+## Toward a "small sentient model"
+
+Sentiance today is an **engine, not a trained model**: the faculties are
+transparent code with traceable numbers, and the *voice* is a swappable LLM
+(qwen/Claude/offline). That transparency is the point — but it also means the
+architecture can be used to **train** a small model that carries the same inner
+life in its own weights. Not a bigger chatbot: a small model with a built-in
+architecture of **selfhood, emotion, memory, drives, and social bonds** — things
+a plain next-token predictor has none of. We call that a *small sentient-behaving
+model*, and the roadmap is honest about the word (see the caveat below).
+
+The `Cognition` port ([ADR-0003](docs/adr/0003-cognition-behind-a-port.md)) and
+the trace export make this concrete in two paths:
+
+- **Path A — distil the voice.** Run the mind (`SENTIANCE_TRACE_PATH=…`, above) to
+  generate a self-labeled dataset of `prompt → thought` pairs, then fine-tune a
+  small base model (e.g. Qwen2.5-0.5B via LoRA) to speak in-character. Register it
+  as a 4th backend (`SENTIANCE_COGNITION_BACKEND=finetuned`) and it drops in — a
+  cheaper, sharper voice with the emotional/self-model bias baked in, still wrapped
+  by the transparent faculties. **Status: trace export shipped; fine-tune script +
+  backend are next.**
+- **Path B — learn the organs.** The same traces carry the moment's structured
+  `state` (appraisal, affect, drives). Replace a hand-coded organ — say the
+  rule-based appraisal — with a small network trained on that signal, so the mind's
+  *reactions* are learned rather than tuned, while the architecture stays intact.
+
+**The honest ceiling (unchanged).** None of this produces *phenomenal*
+consciousness — nothing does, and the project refuses to fake it
+([ADR-0002](docs/adr/0002-functional-not-phenomenal.md)). What you get is a small
+model organised around a self, feelings, memory, and drives — a genuinely novel
+artifact, but "sentient" stays a **functional-correlate** claim. And there's a real
+tradeoff: the honesty guarantees (inspectable numbers, faithful self-report) live
+in the *scaffolding*, so the valuable version keeps the faculties transparent and
+only learns the parts that benefit — the voice, or a single organ — rather than
+melting everything into opaque weights.
+
 ## Development
 
 ```bash
