@@ -98,8 +98,12 @@ def _print_self(mind: Mind) -> None:
     n, t = mind.needs, mind.temperament
     print(f"  needs:     rest {n.rest:.2f}, stimulation {n.stimulation:.2f}, "
           f"connection {n.connection:.2f}")
+    drift = t.drift_from_innate()
     print(f"  temperament: curiosity {t.curiosity:.2f}, anxiety {t.anxiety:.2f}, "
           f"optimism {t.optimism:.2f}")
+    if any(abs(d) >= 0.02 for d in drift.values()):
+        moved = ", ".join(f"{k} {v:+.2f}" for k, v in drift.items() if abs(v) >= 0.02)
+        print(f"    (drifted from who she was: {moved})")
     if s.goals:
         print("  goals:     " + "; ".join(s.goals))
     if s.beliefs:

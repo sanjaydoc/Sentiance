@@ -87,6 +87,7 @@ class Mind:
             curiosity=self.settings.temperament_curiosity,
             anxiety=self.settings.temperament_anxiety,
             optimism=self.settings.temperament_optimism,
+            plasticity=self.settings.temperament_plasticity,
         )
         self.needs = Needs()
         self.curiosity = Curiosity()
@@ -253,6 +254,14 @@ class Mind:
             arousal=self.affect.arousal,
             social=bool(people),
             valence=self.affect.valence,
+        )
+        # 3c. And let this lived moment slowly reshape who she is — the running
+        #     tone of experience nudging her disposition (temperament drift).
+        self.temperament.drift(
+            novelty=percept.novelty,
+            valence=self.affect.valence,
+            arousal=self.affect.arousal,
+            control=self._appraisal.control,
         )
 
         # 4. Attention competition over candidate contents.

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     temperament_curiosity: float = 0.5
     temperament_anxiety: float = 0.5
     temperament_optimism: float = 0.5
+    # How readily lived experience reshapes those traits (0 = fixed personality,
+    # higher = more plastic). Small on purpose: character shifts slowly.
+    temperament_plasticity: float = 0.01
     # Where chat persists the mind across runs (defaults to ~/.sentiance/<name>.json).
     persist_path: str | None = None
 
