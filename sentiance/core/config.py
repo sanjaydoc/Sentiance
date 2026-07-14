@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     temperament_plasticity: float = 0.01
     # Where chat persists the mind across runs (defaults to ~/.sentiance/<name>.json).
     persist_path: str | None = None
+    # If set, every deliberation is logged as a (prompt, state) → thought JSONL row
+    # to this path — a self-labeled dataset for training a small model (Path A/B).
+    trace_path: str | None = None
 
     # Affect dynamics
     mood_inertia: float = 0.9  # EMA weight of prior mood (slow-moving background feeling)

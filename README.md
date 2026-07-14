@@ -63,6 +63,7 @@ On top of the perception → affect → attention → memory → metacognition c
 | 15 | **Dreaming** (`:sleep`) | asleep, she **recombines** fragments of the day's charged memories into something that never happened — forging associations she never made awake, and waking with a new intention when it ran vivid |
 | 16 | **Volition & self-control** | when a strong feeling would hijack her from her intention, she can spend **effort** to hold the line — a reserve that fatigues with use and is renewed by rest (out of it, the impulse wins) |
 | 17 | **Felt time & anticipation** | she feels toward the **future**: a good thing coming lifts her (**hope**), a bad thing looming weighs on her and winds her up (**dread**), swelling as it nears and breaking when it arrives |
+| 18 | **Conversational memory** | she remembers what others **said** and picks up the thread — replies build on it (a call-back to a topic raised) instead of circling; the live line stays in view even when a memory wins attention |
 | — | **Emotional carryover** | feelings persist through her own reflection, then ease — believable emotional arcs |
 | — | **Persistent identity** | all of the above saves to disk and reloads, so she is **continuous across runs** |
 
@@ -230,7 +231,7 @@ file to give her a blank slate; override the location with `SENTIANCE_PERSIST_PA
 **Run the automated tests:**
 
 ```bash
-python -m pytest            # 143 tests; use `python -m pytest`, not bare pytest
+python -m pytest            # 154 tests; use `python -m pytest`, not bare pytest
 python -m pytest -k chat    # just the REPL parsing + scripted-run tests
 ```
 
@@ -366,6 +367,44 @@ you can read the actual conversation. A few moments in:
 Note the temperaments diverge even here: sunny Iris feels the meeting at `+1.00`,
 anxious Milo far more faintly. Delete `memory/iris.json` etc. for a fresh start.
 
+### Training a small model on her (trace export)
+
+Sentiance is an **engine, not a trained model** — the faculties are transparent
+code and the *voice* is a swappable LLM. But it can be a **teacher**: set
+`SENTIANCE_TRACE_PATH` and every deliberation, in any run mode, is logged as one
+JSON line — a self-labeled cognition dataset.
+
+```bash
+SENTIANCE_TRACE_PATH=data/traces.jsonl python -m sentiance society   # or live / chat / demo
+```
+
+```cmd
+set SENTIANCE_TRACE_PATH=data\traces.jsonl
+python -m sentiance society
+```
+
+Each row captures exactly what the cognition saw and produced:
+
+```json
+{"agent": "Iris",
+ "system": "You are the inner voice of Iris …",
+ "prompt": "Right now I am aware of: @Milo … says: … | I feel joy … | My next thought is:",
+ "thought": "I'd love to know what Milo's been dreaming about.",
+ "state": {"emotion": "joy", "valence": 0.86, "arousal": 0.53,
+           "drives": {...}, "goals": [...], "heard": "…"}}
+```
+
+- **`prompt` → `thought`** is a ready supervised pair to **fine-tune a small model
+  to speak in-character** (Path A — the voice). Register the result as a 4th
+  `Cognition` backend and it drops in with no other change.
+- **`state`** is the moment's structured inner context — the signal for later
+  training the individual *organs* (Path B — e.g. a learned appraisal net).
+
+Tracing is a transparent wrapper around the `Cognition` port — nothing about how
+the mind runs changes. Generate volume cheaply with the offline `simulated` voice,
+or richer data with `ollama`. The file is line-delimited JSON: shuffle, split, or
+convert it to any chat-fine-tuning format.
+
 ### The HTTP runtime
 
 ```bash
@@ -428,6 +467,7 @@ sentiance/
     dreaming.py      # sleep: recombine memory into something new
     volition.py      # self-control: hold focus by effort against an impulse
     anticipation.py  # felt time: hope & dread of what's coming
+    conversation.py  # remembering what others said (pick up the thread)
     workspace.py     # global broadcast
     persistence.py   # durable identity (save/load across runs)
     mind.py          # the cycle
@@ -436,8 +476,9 @@ sentiance/
   chat.py      # interactive REPL (streaming, persistent)
   live.py      # let the mind live in the world
   society.py   # several minds share the house, meet, talk, and bond
+  trace.py     # export deliberations as a training dataset (Path A/B)
   __main__.py  # serve / demo / chat / live / society
-tests/         # 143 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat + society
+tests/         # 154 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat + society + trace
 docs/adr/      # decision records
 ```
 
@@ -492,6 +533,7 @@ All settings are `SENTIANCE_*` env vars (see [.env.example](.env.example)):
 | `TEMPERAMENT_CURIOSITY` / `_ANXIETY` / `_OPTIMISM` | her nature, `0..1` — make distinct individuals |
 | `TEMPERAMENT_PLASTICITY` | how fast lived experience reshapes her traits (default `0.01`) |
 | `PERSIST_PATH` | override where her memory is stored |
+| `TRACE_PATH` | log every deliberation as JSONL training data (see *Training a small model on her*) |
 | `MOOD_INERTIA` / `EMOTION_DECAY` / `ATTENTION_TEMPERATURE` / `WORKING_MEMORY_SIZE` | affect & attention dynamics |
 
 Example — a bold, sunny individual named Nova on her local voice:

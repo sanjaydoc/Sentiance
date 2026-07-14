@@ -441,15 +441,22 @@ def build_cognition(settings: Settings) -> Cognition:
     """Select the cognition adapter from settings (composition root, ADR-0003)."""
     backend = settings.cognition_backend
     if backend == "llm":
-        return LLMCognition(
+        base: Cognition = LLMCognition(
             model=settings.llm_model,
             max_tokens=settings.llm_max_tokens,
             api_key=settings.anthropic_api_key,
         )
-    if backend == "ollama":
-        return OllamaCognition(
+    elif backend == "ollama":
+        base = OllamaCognition(
             model=settings.ollama_model,
             base_url=settings.ollama_base_url,
             max_tokens=settings.llm_max_tokens,
         )
-    return SimulatedCognition()
+    else:
+        base = SimulatedCognition()
+
+    if settings.trace_path:
+        from sentiance.trace import wrap_with_trace  # noqa: PLC0415 - avoid import cycle
+
+        return wrap_with_trace(base, settings.trace_path)
+    return base
