@@ -346,7 +346,9 @@ everything social is emergent:
 - they **talk** — each one's inner thought is voiced to whoever's present,
   carrying how they feel, so the listener **catches it** (empathy);
 - they **bond** — repeated warm company deepens attachment;
-- they **seek company** when lonely, and **miss** each other once apart.
+- they **seek company** when lonely, **drift off** for solitude when a crowd has
+  been together a while (so trios break into pairs and re-form), and **miss** each
+  other once apart.
 
 Each housemate saves to its own `memory/<name>.json` — **checkpointed every few
 moments and on exit** (so a long run, or one you `Ctrl-C`, still keeps their
@@ -412,35 +414,112 @@ a 4th `Cognition` backend. Defaults target a **6 GB VRAM** card (RTX 30-series
 mobile): **Qwen2.5-0.5B** + LoRA, batch 1 × grad-accum 16, sequence 512, bf16,
 gradient checkpointing — a few GB and a few minutes of training.
 
+**0. Install the training extras** (once) plus a CUDA build of torch (see the note
+at the end so it uses your GPU):
+
 ```bash
-# 0. install the training extras + a CUDA build of torch (see note below)
 pip install -e ".[finetune]"
-
-# 1. collect data while she lives (run a few sessions), then prepare it
-SENTIANCE_TRACE_PATH=data/traces.jsonl python -m sentiance society
-python scripts/prepare_data.py --traces data/traces.jsonl --out data
-
-# 2. fine-tune — LoRA adapter saved to models/sentiance-voice
-python scripts/finetune.py --train data/train.jsonl --out models/sentiance-voice
-
-# 3. use it — she now thinks with the model trained on her own stream
-SENTIANCE_COGNITION_BACKEND=finetuned python -m sentiance chat
 ```
 
-Windows (cmd) is the same, with `set VAR=...` on its own line and Windows paths
-(`data\traces.jsonl`). The `finetuned` backend loads the model in-process (GPU if
-CUDA is present — ~1 GB VRAM to generate — otherwise CPU, slower but fine), and
-**degrades to the offline voice** if the extras or the model aren't there, so
-nothing breaks.
+**1. Collect a *diverse* dataset.** Quality beats quantity for a 0.5B: a few
+hundred **varied** deliberations — different situations, emotions, and people
+across `society` + `live` + `chat` — teach the voice far better than thousands of
+near-identical ones. Point `SENTIANCE_TRACE_PATH` at one file and every run
+appends to it. Use the `ollama` voice for the richest text.
 
-- **torch:** install the CUDA wheel for your setup from the
+**macOS / Linux (bash/zsh):**
+
+```bash
+export SENTIANCE_COGNITION_BACKEND=ollama
+export SENTIANCE_TRACE_PATH=data/traces.jsonl
+
+# social / emotional / relational data — run a few times (they meet, bond, part)
+python -m sentiance society
+python -m sentiance society
+
+# a solo mind exploring the world — and a different *nature* for variety
+python -m sentiance live
+SENTIANCE_AGENT_NAME=Cass SENTIANCE_TEMPERAMENT_ANXIETY=0.9 \
+  SENTIANCE_TEMPERAMENT_OPTIMISM=0.2 python -m sentiance live
+
+# hand-fed situations chat gives you full control over (see the recipe below)
+python -m sentiance chat
+```
+
+**Windows (cmd)** — `set` each var on its own line, then run:
+
+```cmd
+set SENTIANCE_COGNITION_BACKEND=ollama
+set SENTIANCE_TRACE_PATH=data\traces.jsonl
+
+python -m sentiance society
+python -m sentiance society
+python -m sentiance live
+python -m sentiance chat
+
+REM a different nature (clear the vars after, or open a new terminal)
+set SENTIANCE_AGENT_NAME=Cass
+set SENTIANCE_TEMPERAMENT_ANXIETY=0.9
+set SENTIANCE_TEMPERAMENT_OPTIMISM=0.2
+python -m sentiance live
+```
+
+**Windows (PowerShell):** `$env:SENTIANCE_COGNITION_BACKEND="ollama"; $env:SENTIANCE_TRACE_PATH="data\traces.jsonl"` then run the same commands.
+
+In `chat`, type situations that span the emotional range (each line is a fresh
+labelled example), e.g.:
+
+```text
+@Sam waves warmly #friend
+@Sam is laughing with delight #friend
+a sudden loud crash in the dark #threat
+I want to reach the far room
+the far door is locked and won't budge #loss
+a warm reunion is coming tomorrow #reward
+a fierce storm will come tonight #threat
+@Sam is gone forever
+:sleep
+:idle 5
+```
+
+**2. Prepare** — clean, de-duplicate (incl. near-echoes), split:
+
+```bash
+python scripts/prepare_data.py --traces data/traces.jsonl --out data
+```
+
+It prints `traces read → clean examples (train / val)`. If it drops a lot, the
+data was repetitive — collect more variety, or lower `--similar-threshold`
+(default `0.85`; `0.6` is aggressive, `1.0` keeps exact-dups only).
+
+**3. Fine-tune** — LoRA adapter saved to `models/sentiance-voice` (same command on
+every OS):
+
+```bash
+python scripts/finetune.py --train data/train.jsonl --out models/sentiance-voice
+```
+
+**4. Use it** — she now thinks with the model trained on her own stream:
+
+```bash
+# macOS / Linux
+SENTIANCE_COGNITION_BACKEND=finetuned python -m sentiance chat
+```
+```cmd
+REM Windows (cmd)
+set SENTIANCE_COGNITION_BACKEND=finetuned
+python -m sentiance chat
+```
+
+The `finetuned` backend loads in-process (GPU if CUDA is present — ~1 GB VRAM to
+generate — else CPU, slower but fine) and **degrades to the offline voice** if the
+extras or model aren't there, so nothing breaks.
+
+- **torch:** install the CUDA wheel from the
   [PyTorch selector](https://pytorch.org/get-started/locally/) (e.g. the cu121
-  build) so training uses your GPU, not the CPU.
+  build) so training runs on your GPU, not the CPU.
 - **Bigger base on the same card:** add `--qlora` (4-bit) to `finetune.py` and
-  `pip install bitsandbytes` — that fits a 1.5B base in 6 GB.
-- **Collect enough data first:** a few hundred varied deliberations is a sensible
-  floor; `prepare_data.py` de-duplicates identical pairs, and running `society`
-  with `ollama` (rather than the templated offline voice) gives the richest data.
+  `pip install bitsandbytes` — fits a 1.5B base in 6 GB.
 - Point at a different base with `--base` / `SENTIANCE_LOCAL_BASE_MODEL`, or a
   saved model dir with `SENTIANCE_LOCAL_MODEL_PATH`.
 
