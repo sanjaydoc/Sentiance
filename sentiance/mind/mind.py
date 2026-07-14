@@ -13,6 +13,8 @@ inner stream never stops.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import BaseModel
 
 from sentiance.core.config import Settings, get_settings
@@ -75,6 +77,7 @@ class Mind:
         self.affect = AffectState()
         self.tick_no = 0
         self._pending_inner: Stimulus | None = None
+        self._last_moment: ConsciousMoment | None = None
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -89,13 +92,34 @@ class Mind:
 
     # --- public API -------------------------------------------------------
 
-    def perceive(self, stimulus: Stimulus) -> TickResult:
-        """Present an external stimulus and advance one tick."""
-        return self._tick(stimulus)
+    def perceive(self, stimulus: Stimulus, *, deliberate: bool = True) -> TickResult:
+        """Present an external stimulus and advance one tick.
 
-    def idle(self) -> TickResult:
+        ``deliberate=False`` skips the built-in end-of-tick thought generation —
+        used when a caller (e.g. the chat REPL) drives deliberation itself via
+        ``think()`` so it can stream the thought as it forms.
+        """
+        return self._tick(stimulus, deliberate=deliberate)
+
+    def idle(self, *, deliberate: bool = True) -> TickResult:
         """Advance one tick with no external input — the mind wanders."""
-        return self._tick(None)
+        return self._tick(None, deliberate=deliberate)
+
+    def think(self, on_token: Callable[[str], None] | None = None) -> Stimulus | None:
+        """Deliberate on the current conscious moment and return the next inner
+        thought, streaming it through ``on_token`` if the backend supports it.
+
+        The returned stimulus can be fed back with ``perceive(t, deliberate=False)``.
+        """
+        if self._last_moment is None:
+            return None
+        return self.cognition.deliberate(
+            self._last_moment.content,
+            self._last_moment.source,
+            self.self_model.snapshot(),
+            self.memory,
+            on_token=on_token,
+        )
 
     def live(self, stimuli: list[Stimulus], idle_after: int = 0) -> list[TickResult]:
         """Run a sequence of stimuli, then optionally ``idle_after`` free ticks."""
@@ -108,7 +132,7 @@ class Mind:
 
     # --- the cognitive cycle ---------------------------------------------
 
-    def _tick(self, stimulus: Stimulus | None) -> TickResult:
+    def _tick(self, stimulus: Stimulus | None, *, deliberate: bool = True) -> TickResult:
         self.tick_no += 1
         incoming = stimulus or self._pending_inner or self._wander()
         self._pending_inner = None
@@ -140,11 +164,14 @@ class Mind:
         # 6. Learn: fold the event into the world-model; relax drives.
         self.world.update(percept.content, percept.tags)
         self.drives.decay()
+        self._last_moment = moment
 
         # 7. Deliberate: form the next inner thought (self-sustaining stream).
-        self._pending_inner = self.cognition.deliberate(
-            moment.content, moment.source, self.self_model.snapshot(), self.memory
-        )
+        # Skipped when a caller drives deliberation itself (streaming chat).
+        if deliberate:
+            self._pending_inner = self.cognition.deliberate(
+                moment.content, moment.source, self.self_model.snapshot(), self.memory
+            )
 
         assert self._last_report is not None
         return TickResult(moment=moment, report=self._last_report)

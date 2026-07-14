@@ -24,6 +24,29 @@ class _FakeResponse:
         return self.payload
 
 
+class _FakeStream:
+    """Context manager mimicking httpx's streaming response for /api/chat."""
+
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+
+    def __enter__(self) -> _FakeStream:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        return None
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def iter_lines(self):
+        import json as _json
+
+        for c in self._chunks:  # deltas include their spacing, like real Ollama
+            yield _json.dumps({"message": {"content": c}, "done": False})
+        yield _json.dumps({"message": {"content": ""}, "done": True})
+
+
 @dataclass
 class _FakeHttp:
     content: str = "I turn the new thing over in my mind."
@@ -35,6 +58,14 @@ class _FakeHttp:
         if self.raise_error:
             raise ConnectionError("connection refused")
         return _FakeResponse({"message": {"role": "assistant", "content": self.content}})
+
+    def stream(self, method, url, json):  # noqa: A002 - match httpx signature
+        self.calls.append({"method": method, "url": url, "json": json, "stream": True})
+        if self.raise_error:
+            raise ConnectionError("connection refused")
+        import re
+
+        return _FakeStream(re.findall(r"\S+\s*", self.content))  # keep spacing in deltas
 
 
 def _self_model() -> SelfModelState:
@@ -91,3 +122,31 @@ def test_mind_runs_with_injected_ollama_cognition() -> None:
     r2 = mind.idle()
     assert r2.moment.content
     assert http.calls  # the local model was consulted
+
+
+def test_ollama_streams_tokens_when_on_token_given() -> None:
+    http = _FakeHttp(content="one two three")
+    cog = OllamaCognition(client=http)
+    tokens: list[str] = []
+    result = cog.deliberate(
+        "a new idea", ContentSource.PERCEPT, _self_model(), Memory(), on_token=tokens.append
+    )
+    # Streamed word-by-word via /api/chat with stream=True, then assembled.
+    assert len(tokens) == 3
+    assert result.content == "one two three"
+    assert http.calls[0]["json"]["stream"] is True
+
+
+def test_mind_think_streams_and_perceive_does_not_double_generate() -> None:
+    http = _FakeHttp(content="a quiet realization dawns")
+    mind = Mind(settings=Settings(), cognition=OllamaCognition(client=http))
+    mind.perceive(Stimulus(content="a warm light", intensity=0.6, tags=["light"]), deliberate=False)
+
+    tokens: list[str] = []
+    thought = mind.think(on_token=tokens.append)
+    assert tokens  # the thought streamed live
+    assert thought is not None
+    # Feeding it back with deliberate=False must NOT trigger another model call.
+    before = len(http.calls)
+    mind.perceive(thought, deliberate=False)
+    assert len(http.calls) == before

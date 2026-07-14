@@ -78,10 +78,33 @@ def _print_self(mind: Mind) -> None:
     print(f"  narrative: {s.narrative}")
 
 
+def _reflect(mind: Mind) -> None:
+    """One reflection step: the mind thinks (streaming the thought live), then we
+    show the feeling and report it evokes."""
+    streamed = {"any": False}
+
+    def emit(chunk: str) -> None:
+        if not streamed["any"]:
+            print("  ", end="", flush=True)  # indent before the first token
+            streamed["any"] = True
+        print(chunk, end="", flush=True)
+
+    thought = mind.think(on_token=emit)
+    if thought is None:  # calm/neutral — let the mind wander instead
+        print(format_tick(mind.idle(deliberate=False)))
+        return
+    if not streamed["any"]:  # backend didn't stream (e.g. simulated) — show it now
+        print(f"  {thought.content}", end="")
+    print()
+
+    result = mind.perceive(thought, deliberate=False)
+    a, rep = result.moment.affect, result.report
+    print(f"      [{a.emotion.value} v{a.valence:+.2f} a{a.arousal:.2f}]  ↳ {rep.text}")
+
+
 def run_chat(mind: Mind | None = None) -> None:
     mind = mind or Mind()
-    backend = mind.settings.cognition_backend
-    print(f"— {mind.settings.agent_name} is awake (cognition: {backend}) —")
+    print(f"— {mind.settings.agent_name} is awake (cognition: {mind.settings.cognition_backend}) —")
     print("Type an experience, or :help. Ctrl-C to leave.\n")
 
     while True:
@@ -103,11 +126,12 @@ def run_chat(mind: Mind | None = None) -> None:
             continue
         if command == "idle":
             for _ in range(int(arg)):  # type: ignore[arg-type]
-                print(format_tick(mind.idle()))
+                _reflect(mind)
             continue
 
         # An experience: perceive it, then let the mind reflect a couple of ticks.
+        # deliberate=False — we drive deliberation ourselves in _reflect (to stream).
         assert isinstance(arg, Stimulus)
-        print(format_tick(mind.perceive(arg)))
+        print(format_tick(mind.perceive(arg, deliberate=False)))
         for _ in range(_REFLECT_TICKS):
-            print(format_tick(mind.idle()))
+            _reflect(mind)

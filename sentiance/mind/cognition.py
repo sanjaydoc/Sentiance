@@ -19,6 +19,8 @@ becomes the next tick's stimulus, giving the mind a self-sustaining inner stream
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol
 
 from sentiance.mind.memory import Memory
@@ -28,12 +30,24 @@ from sentiance.mind.util import clamp
 if TYPE_CHECKING:
     from sentiance.core.config import Settings
 
+# A sink for streamed text chunks (word-by-word thought display).
+OnToken = Callable[[str], None]
+
 
 class Cognition(Protocol):
-    """Decide the next self-generated inner content (or ``None`` to fall quiet)."""
+    """Decide the next self-generated inner content (or ``None`` to fall quiet).
+
+    ``on_token``, when given, receives text chunks as the thought is generated so
+    a UI can stream it live; backends that can't stream simply ignore it.
+    """
 
     def deliberate(
-        self, moment_content: str, source: ContentSource, self_model: SelfModelState, memory: Memory
+        self,
+        moment_content: str,
+        source: ContentSource,
+        self_model: SelfModelState,
+        memory: Memory,
+        on_token: OnToken | None = None,
     ) -> Stimulus | None:
         ...
 
@@ -42,7 +56,12 @@ class SimulatedCognition:
     """Template-based inner voice driven by emotion and drive state."""
 
     def deliberate(
-        self, moment_content: str, source: ContentSource, self_model: SelfModelState, memory: Memory
+        self,
+        moment_content: str,
+        source: ContentSource,
+        self_model: SelfModelState,
+        memory: Memory,
+        on_token: OnToken | None = None,
     ) -> Stimulus | None:
         emotion = self_model.affect.emotion
         focus = self_model.current_focus
@@ -171,16 +190,21 @@ class LLMCognition:
         self.fallback: Cognition = fallback or SimulatedCognition()
 
     def deliberate(
-        self, moment_content: str, source: ContentSource, self_model: SelfModelState, memory: Memory
+        self,
+        moment_content: str,
+        source: ContentSource,
+        self_model: SelfModelState,
+        memory: Memory,
+        on_token: OnToken | None = None,
     ) -> Stimulus | None:
         client = self._ensure_client()
         if client is None:
-            return self.fallback.deliberate(moment_content, source, self_model, memory)
+            return self.fallback.deliberate(moment_content, source, self_model, memory, on_token)
 
         try:
-            text = self._complete(client, moment_content, source, self_model)
+            text = self._complete(client, moment_content, source, self_model, on_token)
         except Exception:  # noqa: BLE001 - the inner loop must survive any API error
-            return self.fallback.deliberate(moment_content, source, self_model, memory)
+            return self.fallback.deliberate(moment_content, source, self_model, memory, on_token)
 
         return _thought_to_stimulus(text, self_model.affect)
 
@@ -201,15 +225,31 @@ class LLMCognition:
         return self._client
 
     def _complete(
-        self, client: object, moment_content: str, source: ContentSource, self_model: SelfModelState
+        self,
+        client: object,
+        moment_content: str,
+        source: ContentSource,
+        self_model: SelfModelState,
+        on_token: OnToken | None = None,
     ) -> str:
         system, user = _compose_prompt(self_model, moment_content, source)
+        messages = [{"role": "user", "content": user}]
         # NOTE: no temperature/top_p — those are rejected on Opus 4.8.
+        if on_token is not None:
+            parts: list[str] = []
+            with client.messages.stream(  # type: ignore[attr-defined]
+                model=self.model, max_tokens=self.max_tokens, system=system, messages=messages
+            ) as stream:
+                for chunk in stream.text_stream:
+                    parts.append(chunk)
+                    on_token(chunk)
+                final = stream.get_final_message()
+            if getattr(final, "stop_reason", None) == "refusal":
+                raise RuntimeError("model refused")
+            return "".join(parts).strip()
+
         response = client.messages.create(  # type: ignore[attr-defined]
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+            model=self.model, max_tokens=self.max_tokens, system=system, messages=messages
         )
         if getattr(response, "stop_reason", None) == "refusal":
             raise RuntimeError("model refused")
@@ -246,12 +286,19 @@ class OllamaCognition:
         self.fallback: Cognition = fallback or SimulatedCognition()
 
     def deliberate(
-        self, moment_content: str, source: ContentSource, self_model: SelfModelState, memory: Memory
+        self,
+        moment_content: str,
+        source: ContentSource,
+        self_model: SelfModelState,
+        memory: Memory,
+        on_token: OnToken | None = None,
     ) -> Stimulus | None:
         try:
-            text = self._complete(self._ensure_client(), moment_content, source, self_model)
+            text = self._complete(
+                self._ensure_client(), moment_content, source, self_model, on_token
+            )
         except Exception:  # noqa: BLE001 - a local server hiccup must not crash the mind
-            return self.fallback.deliberate(moment_content, source, self_model, memory)
+            return self.fallback.deliberate(moment_content, source, self_model, memory, on_token)
         return _thought_to_stimulus(text, self_model.affect)
 
     # --- internals --------------------------------------------------------
@@ -263,21 +310,44 @@ class OllamaCognition:
             self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout)
         return self._client
 
+    def _body(self, system: str, user: str, *, stream: bool) -> dict:
+        return {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": stream,
+            "options": {"num_predict": self.max_tokens},
+        }
+
     def _complete(
-        self, client: object, moment_content: str, source: ContentSource, self_model: SelfModelState
+        self,
+        client: object,
+        moment_content: str,
+        source: ContentSource,
+        self_model: SelfModelState,
+        on_token: OnToken | None = None,
     ) -> str:
         system, user = _compose_prompt(self_model, moment_content, source)
+
+        if on_token is not None:
+            parts: list[str] = []
+            with client.stream(  # type: ignore[attr-defined]
+                "POST", "/api/chat", json=self._body(system, user, stream=True)
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    delta = (json.loads(line).get("message") or {}).get("content", "")
+                    if delta:
+                        parts.append(delta)
+                        on_token(delta)
+            return "".join(parts).strip()
+
         response = client.post(  # type: ignore[attr-defined]
-            "/api/chat",
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "stream": False,
-                "options": {"num_predict": self.max_tokens},
-            },
+            "/api/chat", json=self._body(system, user, stream=False)
         )
         response.raise_for_status()
         return (response.json().get("message") or {}).get("content", "")
