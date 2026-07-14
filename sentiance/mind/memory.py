@@ -63,6 +63,20 @@ class Memory:
             )
         return out
 
+    def dump(self) -> dict:
+        return {
+            "working": list(self.working),
+            "episodic": [t.model_dump() for t in self.episodic],
+            "semantic": {tok: dict(bag) for tok, bag in self.semantic.items()},
+        }
+
+    def load(self, data: dict) -> None:
+        self.working = deque(data.get("working", []), maxlen=self.working.maxlen)
+        self.episodic = deque(
+            (MemoryTrace(**t) for t in data.get("episodic", [])), maxlen=self.episodic.maxlen
+        )
+        self.semantic = {tok: Counter(bag) for tok, bag in data.get("semantic", {}).items()}
+
     def most_salient(self) -> MemoryTrace | None:
         """The single most memorable episode (for mind-wandering)."""
         if not self.episodic:

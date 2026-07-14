@@ -39,6 +39,21 @@ class SelfModel:
     def narrative(self) -> str:
         return " → ".join(self._history) if self._history else "(no history yet)"
 
+    def dump(self) -> dict:
+        return {
+            "tick": self.tick,
+            "current_focus": self.current_focus,
+            "history": list(self._history),
+            "affect": self.affect.model_dump(),
+        }
+
+    def load(self, data: dict) -> None:
+        self.tick = int(data.get("tick", 0))
+        self.current_focus = data.get("current_focus", self.current_focus)
+        self._history = deque(data.get("history", []), maxlen=self._history.maxlen)
+        if "affect" in data:
+            self.affect = AffectState(**data["affect"])
+
     def snapshot(self) -> SelfModelState:
         return SelfModelState(
             name=self.name,

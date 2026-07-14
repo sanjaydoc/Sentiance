@@ -78,6 +78,13 @@ class Drives:
         for drive, setpoint in self._setpoints.items():
             self.levels[drive] += (setpoint - self.levels[drive]) * rate
 
+    def dump(self) -> dict:
+        return {drive.value: level for drive, level in self.levels.items()}
+
+    def load(self, data: dict) -> None:
+        for key, level in data.items():
+            self.levels[Drive(key)] = float(level)
+
     # --- internals --------------------------------------------------------
 
     def _apply(self, contributions: dict[Drive, float], novelty: float, threat: float) -> None:

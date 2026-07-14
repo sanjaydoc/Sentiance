@@ -130,6 +130,18 @@ class Mind:
     def state(self) -> SelfModelState:
         return self.self_model.snapshot()
 
+    def save(self, path: str) -> None:
+        """Persist this mind's memory and inner state to disk (durable identity)."""
+        from sentiance.mind import persistence  # noqa: PLC0415 - avoid import cycle
+
+        persistence.save(self, path)
+
+    def load(self, path: str) -> int:
+        """Restore memory + inner state from disk; returns episodes recovered (0 if none)."""
+        from sentiance.mind import persistence  # noqa: PLC0415 - avoid import cycle
+
+        return persistence.load(self, path)
+
     # --- the cognitive cycle ---------------------------------------------
 
     def _tick(self, stimulus: Stimulus | None, *, deliberate: bool = True) -> TickResult:

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     # The mind's identity (used in first-person self-report).
     agent_name: str = "Aria"
+    # Where chat persists the mind across runs (defaults to ~/.sentiance/<name>.json).
+    persist_path: str | None = None
 
     # Affect dynamics
     mood_inertia: float = 0.9  # EMA weight of prior mood (slow-moving background feeling)

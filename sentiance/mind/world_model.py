@@ -33,6 +33,13 @@ class WorldModel:
             self._counts[tok] += 1
         self._observations += 1
 
+    def dump(self) -> dict:
+        return {"counts": dict(self._counts), "observations": self._observations}
+
+    def load(self, data: dict) -> None:
+        self._counts = Counter(data.get("counts", {}))
+        self._observations = int(data.get("observations", 0))
+
     # --- internals --------------------------------------------------------
 
     def _familiarity(self, token: str) -> float:

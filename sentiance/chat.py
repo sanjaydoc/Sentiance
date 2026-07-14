@@ -18,7 +18,9 @@ Line grammar:
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
+from sentiance.core.config import Settings
 from sentiance.mind import Mind, TickResult
 from sentiance.mind.state import Stimulus
 
@@ -39,6 +41,8 @@ def parse_line(line: str) -> Parsed:
         return ("help", None)
     if text == ":self":
         return ("self", None)
+    if text == ":save":
+        return ("save", None)
     if text.startswith(":idle"):
         rest = text[len(":idle"):].strip()
         n = int(rest) if rest.isdigit() else 3
@@ -55,9 +59,17 @@ _HELP = (
     "  <empty>       let the mind wander one tick\n"
     "  :idle N       let it wander N ticks\n"
     "  :self         its current model of itself\n"
+    "  :save         write its memory to disk now\n"
     "  :help         this help\n"
-    "  :quit         leave"
+    "  :quit         leave (saves automatically)"
 )
+
+
+def default_persist_path(settings: Settings) -> str:
+    """Where this named mind's memory lives across runs."""
+    if settings.persist_path:
+        return settings.persist_path
+    return str(Path.home() / ".sentiance" / f"{settings.agent_name.lower()}.json")
 
 
 def format_tick(result: TickResult) -> str:
@@ -102,24 +114,49 @@ def _reflect(mind: Mind) -> None:
     print(f"      [{a.emotion.value} v{a.valence:+.2f} a{a.arousal:.2f}]  ↳ {rep.text}")
 
 
-def run_chat(mind: Mind | None = None) -> None:
+def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
+    # A mind we create persists to disk by default (durable identity across runs);
+    # an injected mind (e.g. in tests) only persists if a path is given explicitly.
+    owns_mind = mind is None
     mind = mind or Mind()
-    print(f"— {mind.settings.agent_name} is awake (cognition: {mind.settings.cognition_backend}) —")
+    name = mind.settings.agent_name
+    path = persist_path or (default_persist_path(mind.settings) if owns_mind else None)
+
+    print(f"— {name} is awake (cognition: {mind.settings.cognition_backend}) —")
+    if path:
+        recovered = mind.load(path)
+        if recovered:
+            print(f"  …{name} remembers {recovered} moments from before.")
     print("Type an experience, or :help. Ctrl-C to leave.\n")
+
+    def _leave() -> None:
+        if path:
+            mind.save(path)
+            print(f"— {name} sleeps, remembering ({path}) —")
+        else:
+            print(f"— {name} rests —")
 
     while True:
         try:
             line = input("you> ")
         except (EOFError, KeyboardInterrupt):
-            print(f"\n— {mind.settings.agent_name} rests —")
+            print()
+            _leave()
             return
 
         command, arg = parse_line(line)
         if command == "quit":
-            print(f"— {mind.settings.agent_name} rests —")
+            _leave()
             return
         if command == "help":
             print(_HELP)
+            continue
+        if command == "save":
+            if path:
+                mind.save(path)
+                print(f"  …saved to {path}")
+            else:
+                print("  (no persistence path set)")
             continue
         if command == "self":
             _print_self(mind)
