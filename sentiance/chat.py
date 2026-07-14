@@ -89,7 +89,19 @@ def _print_self(mind: Mind) -> None:
     print(f"  focus:     {s.current_focus}")
     print(f"  mood:      valence {s.affect.mood_valence:+.2f}, arousal {s.affect.mood_arousal:.2f}")
     print("  drives:    {" + drives + "}")
+    if s.goals:
+        print("  goals:     " + "; ".join(s.goals))
     print(f"  narrative: {s.narrative}")
+
+
+def _announce_goals(mind: Mind) -> None:
+    labels = {
+        "formed": "new intention",
+        "resolved": "intention resolved",
+        "abandoned": "intention let go",
+    }
+    for event, goal in mind.last_goal_events:
+        print(f"      ({labels[event]}: {goal.description})")
 
 
 def _reflect(mind: Mind) -> None:
@@ -106,6 +118,7 @@ def _reflect(mind: Mind) -> None:
     thought = mind.think(on_token=emit)
     if thought is None:  # calm/neutral — let the mind wander instead
         print(format_tick(mind.idle(deliberate=False)))
+        _announce_goals(mind)
         return
     if not streamed["any"]:  # backend didn't stream (e.g. simulated) — show it now
         print(f"  {thought.content}", end="")
@@ -114,6 +127,7 @@ def _reflect(mind: Mind) -> None:
     result = mind.perceive(thought, deliberate=False)
     a, rep = result.moment.affect, result.report
     print(f"      [{a.emotion.value} v{a.valence:+.2f} a{a.arousal:.2f}]  ↳ {rep.text}")
+    _announce_goals(mind)
 
 
 def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
@@ -172,5 +186,6 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
         # deliberate=False — we drive deliberation ourselves in _reflect (to stream).
         assert isinstance(arg, Stimulus)
         print(format_tick(mind.perceive(arg, deliberate=False)))
+        _announce_goals(mind)
         for _ in range(_REFLECT_TICKS):
             _reflect(mind)

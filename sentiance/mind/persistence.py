@@ -31,6 +31,7 @@ def snapshot(mind: Mind) -> dict:
         "memory": mind.memory.dump(),
         "world": mind.world.dump(),
         "self_model": mind.self_model.dump(),
+        "goals": mind.goals.dump(),
     }
 
 
@@ -42,6 +43,7 @@ def restore(mind: Mind, data: dict) -> None:
     mind.memory.load(data.get("memory", {}))
     mind.world.load(data.get("world", {}))
     mind.self_model.load(data.get("self_model", {}))
+    mind.goals.load(data.get("goals", {}))
 
 
 def save(mind: Mind, path: str | Path) -> None:

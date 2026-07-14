@@ -26,9 +26,10 @@ def test_threat_makes_the_mind_afraid(mind: Mind) -> None:
 def test_memories_resurface_later(mind: Mind) -> None:
     mind.perceive(Stimulus(content="a friendly voice says hello", intensity=0.6, tags=["friend"]))
     mind.perceive(Stimulus(content="a loud crash", intensity=0.95, tags=["threat"]))
-    # Idle: the friendly voice should be recallable as a memory.
+    # Idle: a memory should resurface as the mind wanders (intentions now also
+    # compete for the spotlight, so give it a few ticks).
     seen_memory = False
-    for _ in range(4):
+    for _ in range(8):
         r = mind.idle()
         if r.moment.source is ContentSource.MEMORY or "memory" in r.moment.content:
             seen_memory = True

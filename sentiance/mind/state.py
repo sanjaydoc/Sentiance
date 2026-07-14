@@ -7,6 +7,7 @@ does is a transformation between these types along the cognitive cycle
 
 from __future__ import annotations
 
+import uuid
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,10 @@ from pydantic import BaseModel, Field
 
 TOPIC_CONSCIOUS = "workspace.conscious"  # the current contents of consciousness
 TOPIC_INTROSPECTION = "workspace.introspection"  # metacognitive self-reports
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex[:12]
 
 
 # --- Enums ----------------------------------------------------------------
@@ -146,6 +151,28 @@ class MemoryTrace(BaseModel):
     salience: float
 
 
+# --- Goals & intentions ---------------------------------------------------
+
+
+class GoalStatus(StrEnum):
+    ACTIVE = "active"
+    RESOLVED = "resolved"
+    ABANDONED = "abandoned"
+
+
+class Goal(BaseModel):
+    """A standing intention the mind holds and works toward across ticks."""
+
+    goal_id: str = Field(default_factory=_new_id)
+    description: str  # e.g. "check where that sound came from"
+    drive: Drive  # the motivation behind it
+    created_tick: int
+    updated_tick: int
+    urgency: float = Field(0.6, ge=0.0, le=1.0)
+    progress: float = Field(0.0, ge=0.0, le=1.0)
+    status: GoalStatus = GoalStatus.ACTIVE
+
+
 class SelfModelState(BaseModel):
     """The mind's model of itself — the substrate of self-report (AST)."""
 
@@ -155,3 +182,4 @@ class SelfModelState(BaseModel):
     affect: AffectState
     drives: dict[Drive, float]
     narrative: str  # a running, compressed autobiography
+    goals: list[str] = Field(default_factory=list)  # active intentions, if any

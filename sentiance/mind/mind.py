@@ -22,6 +22,7 @@ from sentiance.mind.affect import AffectSystem
 from sentiance.mind.attention import AttentionSystem
 from sentiance.mind.cognition import Cognition, build_cognition
 from sentiance.mind.drives import Drives
+from sentiance.mind.goals import GoalSystem
 from sentiance.mind.memory import Memory
 from sentiance.mind.metacognition import Metacognition
 from sentiance.mind.perception import Perceptor
@@ -72,12 +73,14 @@ class Mind:
         )
         self.self_model = SelfModel(self.settings.agent_name)
         self.metacognition = Metacognition()
+        self.goals = GoalSystem()
         self.cognition = cognition or build_cognition(self.settings)
 
         self.affect = AffectState()
         self.tick_no = 0
         self._pending_inner: Stimulus | None = None
         self._last_moment: ConsciousMoment | None = None
+        self.last_goal_events: list[tuple[str, object]] = []  # for the UI to announce
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -116,7 +119,7 @@ class Mind:
         return self.cognition.deliberate(
             self._last_moment.content,
             self._last_moment.source,
-            self.self_model.snapshot(),
+            self._snapshot(),
             self.memory,
             on_token=on_token,
         )
@@ -128,7 +131,13 @@ class Mind:
         return results
 
     def state(self) -> SelfModelState:
-        return self.self_model.snapshot()
+        return self._snapshot()
+
+    def _snapshot(self) -> SelfModelState:
+        """Self-model snapshot with active goals folded in (used by cognition)."""
+        s = self.self_model.snapshot()
+        s.goals = self.goals.descriptions()
+        return s
 
     def save(self, path: str) -> None:
         """Persist this mind's memory and inner state to disk (durable identity)."""
@@ -173,16 +182,19 @@ class Mind:
         self.workspace.broadcast(moment)
         self.workspace.drain()
 
-        # 6. Learn: fold the event into the world-model; relax drives.
+        # 6. Learn: fold the event into the world-model; relax drives; update goals.
         self.world.update(percept.content, percept.tags)
         self.drives.decay()
+        self.last_goal_events = self.goals.update(
+            moment, self._appraisal, self._dominant_drive, self.affect, self.drives.levels
+        )
         self._last_moment = moment
 
         # 7. Deliberate: form the next inner thought (self-sustaining stream).
         # Skipped when a caller drives deliberation itself (streaming chat).
         if deliberate:
             self._pending_inner = self.cognition.deliberate(
-                moment.content, moment.source, self.self_model.snapshot(), self.memory
+                moment.content, moment.source, self._snapshot(), self.memory
             )
 
         assert self._last_report is not None
@@ -209,6 +221,16 @@ class Mind:
             )
         # Associative recall cued by the current percept.
         candidates += self.memory.retrieve(percept.content, percept.tags, k=1)
+        # A standing intention can intrude on consciousness ("what was I doing?").
+        goal = self.goals.top()
+        if goal is not None:
+            candidates.append(
+                Candidate(
+                    content=f"my intention to {goal.description}",
+                    source=ContentSource.THOUGHT,
+                    salience=clamp(0.2 + 0.35 * goal.urgency),
+                )
+            )
         # A self-generated thought carries the THOUGHT source.
         if percept.content.startswith("I ") or "reflection" in percept.tags:
             candidates[0] = candidates[0].model_copy(update={"source": ContentSource.THOUGHT})
@@ -241,7 +263,7 @@ class Mind:
 
     def _on_conscious_reflect(self, moment: ConsciousMoment) -> None:
         report = self.metacognition.reflect(
-            moment, self.self_model.snapshot(), self._appraisal, self._dominant_drive
+            moment, self._snapshot(), self._appraisal, self._dominant_drive
         )
         self._last_report = report
         self.workspace.broadcast_report(report)

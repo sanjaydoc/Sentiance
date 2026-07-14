@@ -105,7 +105,14 @@ class SimulatedCognition:
                 intensity=0.35,
                 tags=["reflection"],
             )
-        return None  # calm/neutral: let the mind fall quiet and wander
+        # Calm and with something to do → pursue the standing intention.
+        if self_model.goals:
+            return thought(
+                f"I still mean to {self_model.goals[0]}.",
+                intensity=0.35,
+                tags=["intention", "reflection"],
+            )
+        return None  # calm/neutral with nothing pending: fall quiet and wander
 
 
 # --- LLM-backed inner monologue ------------------------------------------
@@ -134,12 +141,14 @@ def _compose_prompt(
     affect = self_model.affect
     drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
     system = _SYSTEM_TEMPLATE.format(name=self_model.name)
+    goals = "; ".join(self_model.goals) if self_model.goals else "none right now"
     user = (
         f"Right now I am aware of: {moment_content}\n"
         f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
         f"I feel {affect.emotion.value} — valence {affect.valence:+.2f}, "
         f"arousal {affect.arousal:.2f}.\n"
         f"My drives: {drives}.\n"
+        f"What I'm trying to do: {goals}.\n"
         f"Recent stream: {self_model.narrative}\n"
         "My next thought is:"
     )
