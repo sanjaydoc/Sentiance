@@ -50,6 +50,7 @@ class Inhabitant:
     last_utterance: str | None = None
     last_emotion: Emotion = Emotion.NEUTRAL
     was_with: set[str] = field(default_factory=set)
+    together: int = 0  # consecutive ticks with the same company (drives excursions)
 
     @property
     def room(self) -> str:
@@ -83,8 +84,9 @@ def _social_stimulus(other: Inhabitant, *, first_meeting: bool) -> Stimulus:
 
 
 class Society:
-    def __init__(self, inhabitants: list[Inhabitant]) -> None:
+    def __init__(self, inhabitants: list[Inhabitant], satiation: int = 5) -> None:
         self.inhabitants = inhabitants
+        self._satiation = satiation  # ticks of steady company before a solo excursion
 
     def occupants(self, room: str, exclude: str) -> list[Inhabitant]:
         return [i for i in self.inhabitants if i.name != exclude and i.room == room]
@@ -113,6 +115,7 @@ class Society:
                 stim = _social_stimulus(other, first_meeting=first)
             else:
                 stim = me.world.sense()
+            me.together = me.together + 1 if (here and here == me.was_with) else 0
             me.was_with = here
 
             # 1. Perceive the moment (meeting / hearing another / the room), and
@@ -154,16 +157,44 @@ class Society:
         return notes
 
     def _move(self, me: Inhabitant, thought: str, others: list[Inhabitant]) -> None:
-        # With company she tends to stay unless her thought says otherwise; alone
-        # and lonely, she goes looking for someone.
+        # Her thought moves her first; then the social pull. Alone and lonely, she
+        # seeks company; sated on company but under-stimulated, she wanders off to a
+        # quieter room — so the group doesn't clump forever, pairs form and re-form,
+        # and partings/reunions/new dyads keep the lived situations varied.
         before = me.room
         me.world.act(thought)
         if me.room != before:
             return
-        if not others and me.mind.needs.connection < 0.5:
-            target = self._nearest_occupied(me)
-            if target:
-                me.world.head_to(target)
+        needs = me.mind.needs
+        if not others:
+            if needs.connection < 0.6:
+                target = self._nearest_occupied(me)
+                if target:
+                    me.world.head_to(target)
+        # A one-on-one stays and deepens; but in a *crowd* (two or more others),
+        # after a good while she takes a solo excursion to a quieter room —
+        # breaking a trio into a pair + a wanderer, so reunions and different
+        # dyads keep the situations varied without stopping anyone from bonding.
+        elif len(others) >= 2 and me.together >= self._satiation and needs.connection > 0.5:
+            drifted = self._quietest_exit(me)
+            if drifted:
+                me.world.move(drifted)
+                me.together = 0
+
+    def _quietest_exit(self, me: Inhabitant) -> str | None:
+        """An adjacent room with the fewest others (ties → least-visited) — where
+        she goes when she's had her fill of company and wants a change."""
+        exits = me.world.here().exits
+        if not exits:
+            return None
+        here = {i.room for i in self.inhabitants if i.name != me.name}
+        return min(
+            exits,
+            key=lambda r: (sum(1 for i in self.inhabitants
+                               if i.name != me.name and i.room == r),
+                           1 if r in here else 0,
+                           me.world.visited.get(r, 0)),
+        )
 
 
 def _cast() -> list[Inhabitant]:

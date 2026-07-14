@@ -62,6 +62,20 @@ def test_a_lonely_mind_goes_looking_for_company() -> None:
     assert met  # loneliness drew them into the same room
 
 
+def test_a_trio_breaks_up_so_every_pair_gets_to_meet() -> None:
+    from sentiance.society import _cast
+
+    society = Society(_cast())
+    for _ in range(40):
+        society.step()
+    # Because a crowd sheds a wanderer, no one is stuck only knowing the popular
+    # housemate — each of the three comes to know *both* of the others.
+    for me in society.inhabitants:
+        known = set(me.mind.relationships.people)
+        others = {other.name for other in society.inhabitants if other.name != me.name}
+        assert known == others
+
+
 def test_the_bond_they_build_persists_across_a_reload(tmp_path) -> None:
     ada, bo = _pair("kitchen", "kitchen")
     society = Society([ada, bo])
