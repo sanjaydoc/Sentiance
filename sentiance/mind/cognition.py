@@ -452,6 +452,14 @@ def build_cognition(settings: Settings) -> Cognition:
             base_url=settings.ollama_base_url,
             max_tokens=settings.llm_max_tokens,
         )
+    elif backend == "finetuned":
+        from sentiance.mind.local_model import TransformersCognition  # noqa: PLC0415 - lazy
+
+        base = TransformersCognition(
+            model_path=settings.local_model_path,
+            base_model=settings.local_base_model,
+            max_tokens=settings.llm_max_tokens,
+        )
     else:
         base = SimulatedCognition()
 

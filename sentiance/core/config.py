@@ -39,9 +39,13 @@ class Settings(BaseSettings):
     working_memory_size: int = 7  # Miller's 7±2
     episodic_capacity: int = 500
 
-    # Cognition backend: "simulated" (offline), "llm" (Anthropic), or "ollama" (local).
+    # Cognition backend: "simulated" (offline), "llm" (Anthropic), "ollama" (local),
+    # or "finetuned" (a small model trained on her own traces — Path A).
     cognition_backend: str = "simulated"
     llm_max_tokens: int = 256
+    # "finetuned" backend: a locally-loaded small model (LoRA adapter or full dir).
+    local_model_path: str = "models/sentiance-voice"
+    local_base_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
     # "llm" backend (Anthropic).
     llm_model: str = "claude-opus-4-8"
     # Falls back to the ANTHROPIC_API_KEY the SDK reads from the environment.

@@ -231,7 +231,7 @@ file to give her a blank slate; override the location with `SENTIANCE_PERSIST_PA
 **Run the automated tests:**
 
 ```bash
-python -m pytest            # 154 tests; use `python -m pytest`, not bare pytest
+python -m pytest            # 160 tests; use `python -m pytest`, not bare pytest
 python -m pytest -k chat    # just the REPL parsing + scripted-run tests
 ```
 
@@ -405,6 +405,49 @@ the mind runs changes. Generate volume cheaply with the offline `simulated` voic
 or richer data with `ollama`. The file is line-delimited JSON: shuffle, split, or
 convert it to any chat-fine-tuning format.
 
+#### Fine-tune the voice (Path A) — sized for a 6 GB laptop GPU
+
+Turn those traces into a small model that speaks in-character, then drop it in as
+a 4th `Cognition` backend. Defaults target a **6 GB VRAM** card (RTX 30-series
+mobile): **Qwen2.5-0.5B** + LoRA, batch 1 × grad-accum 16, sequence 512, bf16,
+gradient checkpointing — a few GB and a few minutes of training.
+
+```bash
+# 0. install the training extras + a CUDA build of torch (see note below)
+pip install -e ".[finetune]"
+
+# 1. collect data while she lives (run a few sessions), then prepare it
+SENTIANCE_TRACE_PATH=data/traces.jsonl python -m sentiance society
+python scripts/prepare_data.py --traces data/traces.jsonl --out data
+
+# 2. fine-tune — LoRA adapter saved to models/sentiance-voice
+python scripts/finetune.py --train data/train.jsonl --out models/sentiance-voice
+
+# 3. use it — she now thinks with the model trained on her own stream
+SENTIANCE_COGNITION_BACKEND=finetuned python -m sentiance chat
+```
+
+Windows (cmd) is the same, with `set VAR=...` on its own line and Windows paths
+(`data\traces.jsonl`). The `finetuned` backend loads the model in-process (GPU if
+CUDA is present — ~1 GB VRAM to generate — otherwise CPU, slower but fine), and
+**degrades to the offline voice** if the extras or the model aren't there, so
+nothing breaks.
+
+- **torch:** install the CUDA wheel for your setup from the
+  [PyTorch selector](https://pytorch.org/get-started/locally/) (e.g. the cu121
+  build) so training uses your GPU, not the CPU.
+- **Bigger base on the same card:** add `--qlora` (4-bit) to `finetune.py` and
+  `pip install bitsandbytes` — that fits a 1.5B base in 6 GB.
+- **Collect enough data first:** a few hundred varied deliberations is a sensible
+  floor; `prepare_data.py` de-duplicates identical pairs, and running `society`
+  with `ollama` (rather than the templated offline voice) gives the richest data.
+- Point at a different base with `--base` / `SENTIANCE_LOCAL_BASE_MODEL`, or a
+  saved model dir with `SENTIANCE_LOCAL_MODEL_PATH`.
+
+This is **Path A** (the voice). **Path B** — training the individual *organs*
+(e.g. a learned appraisal net) from the `state` field — reuses the same traces;
+see *Toward a "small sentient model"* below.
+
 ### The HTTP runtime
 
 ```bash
@@ -453,7 +496,8 @@ sentiance/
     embeddings.py    # associative memory: recall by meaning
     self_model.py    # attention schema / narrative / beliefs
     metacognition.py # first-person self-report
-    cognition.py     # Cognition port: Simulated / LLM (Anthropic) / Ollama
+    cognition.py     # Cognition port: Simulated / LLM (Anthropic) / Ollama / finetuned
+    local_model.py   # finetuned backend: a small model trained on her own traces
     goals.py         # intentions: form, hold, pursue, resolve
     consolidation.py # sleep: distil experience into durable beliefs
     relationships.py # per-person models (theory-of-mind)
@@ -477,8 +521,10 @@ sentiance/
   live.py      # let the mind live in the world
   society.py   # several minds share the house, meet, talk, and bond
   trace.py     # export deliberations as a training dataset (Path A/B)
+  training/    # dataset.py: traces → chat-format fine-tuning examples (pure Python)
   __main__.py  # serve / demo / chat / live / society
-tests/         # 154 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat + society + trace
+scripts/       # prepare_data.py + finetune.py (LoRA, 6 GB-tuned) — the [finetune] extra
+tests/         # 160 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training
 docs/adr/      # decision records
 ```
 
@@ -527,7 +573,8 @@ All settings are `SENTIANCE_*` env vars (see [.env.example](.env.example)):
 | Var | What it does |
 | --- | ------------ |
 | `AGENT_NAME` | the mind's name → its memory file `memory/<name>.json` (run many, each separate) |
-| `COGNITION_BACKEND` | the inner voice: `simulated` (default, offline) · `ollama` · `llm` |
+| `COGNITION_BACKEND` | the inner voice: `simulated` (default, offline) · `ollama` · `llm` · `finetuned` |
+| `LOCAL_MODEL_PATH` / `LOCAL_BASE_MODEL` | `finetuned` backend: trained adapter dir + its base model |
 | `OLLAMA_MODEL` / `OLLAMA_BASE_URL` | local model + endpoint (default `qwen2.5:7b`, `localhost:11434`) |
 | `EMBEDDING_BACKEND` / `EMBEDDING_MODEL` | set to `ollama` + `nomic-embed-text` for by-meaning recall |
 | `TEMPERAMENT_CURIOSITY` / `_ANXIETY` / `_OPTIMISM` | her nature, `0..1` — make distinct individuals |

@@ -1,0 +1,37 @@
+"""Turn a Sentiance trace file into train/val fine-tuning sets.
+
+    python scripts/prepare_data.py --traces data/traces.jsonl --out data
+
+Pure Python (no ML deps). Writes ``data/train.jsonl`` (+ ``val.jsonl``) as chat
+examples ready for ``scripts/finetune.py``.
+"""
+
+from __future__ import annotations
+
+import argparse
+
+from sentiance.training.dataset import prepare
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Prepare fine-tuning data from Sentiance traces.")
+    ap.add_argument("--traces", default="data/traces.jsonl", help="input JSONL trace file")
+    ap.add_argument("--out", default="data", help="output directory for train/val jsonl")
+    ap.add_argument("--min-words", type=int, default=3, help="drop thoughts shorter than this")
+    ap.add_argument("--val-frac", type=float, default=0.1, help="validation fraction")
+    ap.add_argument("--seed", type=int, default=0)
+    args = ap.parse_args()
+
+    stats = prepare(
+        args.traces, args.out,
+        min_thought_words=args.min_words, val_frac=args.val_frac, seed=args.seed,
+    )
+    print(
+        f"traces read: {stats['rows']}  →  clean examples: {stats['examples']}  "
+        f"(train {stats['train']}, val {stats['val']})"
+    )
+    print(f"wrote {args.out}/train.jsonl" + (f" and {args.out}/val.jsonl" if stats["val"] else ""))
+
+
+if __name__ == "__main__":
+    main()

@@ -31,6 +31,10 @@ htmlcov/
 # The mind's persisted memory (kept local, never committed)
 memory/
 
+# Training data + fine-tuned model artifacts (kept local, never committed)
+data/
+models/
+
 # IDE / editor
 .idea/
 .vscode/

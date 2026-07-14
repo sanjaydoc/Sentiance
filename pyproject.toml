@@ -21,6 +21,16 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["anthropic>=0.40"]
+# Fine-tuning her voice into a small model (Path A). Heavy — install only to train
+# or to run the `finetuned` cognition backend. Install a CUDA build of torch first
+# (see the README) so it uses your GPU; bitsandbytes is only needed for --qlora.
+finetune = [
+    "transformers>=4.44",
+    "peft>=0.12",
+    "trl>=0.9",
+    "datasets>=2.20",
+    "accelerate>=0.33",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
