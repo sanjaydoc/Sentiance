@@ -28,7 +28,9 @@ Each faculty implements a role from a theory of mind:
 | Global Workspace Theory (Baars/Dehaene) | attention competition + workspace broadcast |
 | Attention Schema Theory (Graziano) | the self-model |
 | Appraisal theory + affect circumplex (Scherer/Russell) | drives + affect |
-| Predictive processing (Friston/Clark) | world-model surprise |
+| Predictive processing (Friston/Clark) | world-model surprise + imagination (forward model) |
+| Active inference / epistemic drives (Friston, Oudeyer) | intrinsic curiosity |
+| Self-conscious emotion (Tracy & Robins; Lewis) | conscience — pride & disappointment |
 | Higher-order theories (Rosenthal/Lau) | metacognitive self-report |
 
 ## Faculties of mind
@@ -43,6 +45,9 @@ On top of the perception → affect → attention → memory → metacognition c
 | 4 | **Reflection / sleep** (`:sleep`) | distils recurring experience into durable **beliefs** ("loud sounds tend to frighten me") and rests — she grows wiser |
 | 5 | **Relationships** (`@Name`, `:people`) | persistent per-person models — affection & trust built over encounters that **color how she sees them** |
 | 6 | **Temperament & needs** | stable traits (curiosity/anxiety/optimism) make her an **individual**; homeostatic needs (rest/stimulation/connection) create boredom & loneliness when unmet |
+| 7 | **Imagination & foresight** | before acting she **pre-lives** her options — runs the real appraisal machinery as a dry run (mutating nothing) and reads off how each would feel — then chooses the future she anticipates liking best |
+| 8 | **Intrinsic curiosity** | an epistemic drive toward what she doesn't yet understand: the unexplored draws her (so she finishes mapping her world), and the once-surprising becoming familiar rewards her — the quiet **"aha"** of understanding |
+| 9 | **Self-conscious emotions** | she measures her conduct against her own standards — following through on an intention breeds **pride**, letting one go breeds **disappointment** — feeling not just about the world but about herself |
 | — | **Emotional carryover** | feelings persist through her own reflection, then ease — believable emotional arcs |
 | — | **Persistent identity** | all of the above saves to disk and reloads, so she is **continuous across runs** |
 
@@ -224,8 +229,9 @@ curl localhost:8000/v1/self                      # its model of itself
 Each `tick` (`sentiance/mind/mind.py`):
 
 ```
-perceive → predict/surprise → appraise → feel → attend → BROADCAST
-         → remember + update self-model + reflect → learn → deliberate
+perceive → predict/surprise → appraise → feel (+curiosity's aha) → attend → BROADCAST
+         → remember + update self-model + reflect → learn → judge self (pride/disappointment)
+         → deliberate (with foresight over imagined options)
 ```
 
 The winning content is broadcast on the **global workspace** (the event bus);
@@ -254,6 +260,9 @@ sentiance/
     consolidation.py # sleep: distil experience into durable beliefs
     relationships.py # per-person models (theory-of-mind)
     temperament.py   # stable traits + homeostatic needs
+    imagination.py   # foresight: pre-live options, choose by anticipated feeling
+    curiosity.py     # epistemic drive: seek the unknown, reward understanding
+    conscience.py    # self-conscious emotion: pride & disappointment
     workspace.py     # global broadcast
     persistence.py   # durable identity (save/load across runs)
     mind.py          # the cycle
@@ -262,7 +271,7 @@ sentiance/
   chat.py      # interactive REPL (streaming, persistent)
   live.py      # let the mind live in the world
   __main__.py  # serve / demo / chat / live
-tests/         # 74 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
+tests/         # 89 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
 docs/adr/      # decision records
 ```
 
