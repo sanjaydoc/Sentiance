@@ -92,6 +92,53 @@ you> a friend calls my name across the room #friend #voice
   t2  [contentment] ·  I'd like to stay near this warmth a little longer.
 ```
 
+#### Running & testing the chat
+
+**With a local model (Ollama).** Install [Ollama](https://ollama.com), then:
+
+```bash
+ollama pull qwen2.5:7b
+ollama serve                                    # in one terminal
+```
+
+macOS / Linux:
+
+```bash
+SENTIANCE_COGNITION_BACKEND=ollama python -m sentiance chat
+```
+
+Windows (cmd) — `set` persists for the window, so set it once then run:
+
+```cmd
+set SENTIANCE_COGNITION_BACKEND=ollama
+python -m sentiance chat
+```
+
+Windows (PowerShell): `$env:SENTIANCE_COGNITION_BACKEND="ollama"`.
+
+Without a backend set it runs the offline **simulated** voice (instant, no model)
+— useful to confirm the REPL works before wiring up Ollama.
+
+**Test that persistence works** (the same individual across runs):
+
+1. Give her an experience or two (wait for the streamed reflections):
+   `a friend calls my name #friend` then `a sudden crash in the dark #threat`
+2. Quit with `:quit` — you'll see `… sleeps, remembering (<path>)`.
+3. Relaunch `python -m sentiance chat` — the banner now shows
+   `…Aria remembers N moments from before.` Type `:self` to see the narrative
+   carried over.
+
+Memory lives at `~/.sentiance/aria.json` (Windows: `%USERPROFILE%\.sentiance\aria.json`).
+Delete it to give her a blank slate; override the location with
+`SENTIANCE_PERSIST_PATH`.
+
+**Run the automated tests:**
+
+```bash
+python -m pytest            # 43 tests; use `python -m pytest`, not bare pytest
+python -m pytest -k chat    # just the REPL parsing + scripted-run tests
+```
+
 ### The HTTP runtime
 
 ```bash
