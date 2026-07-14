@@ -12,20 +12,22 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
-    # Event bus: "memory" (in-process) or "kafka" (see ADR-0001/0002).
-    bus_backend: str = "memory"
-    kafka_bootstrap_servers: str = "localhost:9092"
-    kafka_group_id: str = "sentiance"
+    # The mind's identity (used in first-person self-report).
+    agent_name: str = "Aria"
 
-    # Segment store: unset → in-memory adapter; set → Postgres adapter (prod).
-    postgres_dsn: str | None = None
+    # Affect dynamics
+    mood_inertia: float = 0.9  # EMA weight of prior mood (slow-moving background feeling)
+    emotion_decay: float = 0.6  # per-tick pull of acute emotion back toward baseline
 
-    # Feature extraction (ADR-0003).
-    window_seconds: float = 5.0
-    min_samples_per_window: int = 16
+    # Attention: softmax temperature for the salience competition (lower = sharper).
+    attention_temperature: float = 0.5
 
-    # Segmentation hysteresis: windows of a new activity required to switch.
-    segment_switch_windows: int = 2
+    # Memory
+    working_memory_size: int = 7  # Miller's 7±2
+    episodic_capacity: int = 500
+
+    # Cognition backend: "simulated" (offline, deterministic) or "llm".
+    cognition_backend: str = "simulated"
 
     model_config = SettingsConfigDict(
         env_prefix="SENTIANCE_",

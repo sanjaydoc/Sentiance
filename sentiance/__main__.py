@@ -1,43 +1,50 @@
-"""``python -m sentiance`` — run the all-in-one dev server, or a demo.
+"""``python -m sentiance`` — serve a mind, or watch its stream of consciousness.
 
-- ``python -m sentiance``        → serve the platform on :8000 (docs at /docs)
-- ``python -m sentiance demo``   → run a synthetic commute through the pipeline
-                                    in-process and print the resulting timeline
+- ``python -m sentiance``        → serve the mind on :8000 (docs at /docs)
+- ``python -m sentiance demo``   → feed a short scripted experience and print the
+                                    conscious moments + first-person reports
 """
 
 from __future__ import annotations
 
 import sys
 
-from sentiance.core.bus.memory import InMemoryEventBus
-from sentiance.core.repositories.memory import InMemorySegmentRepository
-from sentiance.insights.service import SegmentConsumer, TimelineService
-from sentiance.processing.pipeline import ProcessingPipeline
-from sentiance.simulation.generator import simulate_day
+from sentiance.mind import Mind, Stimulus
 
 
 def run_demo() -> None:
-    bus = InMemoryEventBus()
-    repo = InMemorySegmentRepository()
-    pipeline = ProcessingPipeline(bus)
-    pipeline.register()
-    SegmentConsumer(repo).register(bus)
+    mind = Mind()
 
-    for batch in simulate_day():
-        bus.publish("sensor.raw", key=batch.device_id, value=batch)
-        bus.drain()
-    pipeline.flush()
-    bus.drain()
+    experience = [
+        Stimulus(content="a soft chime sounds nearby", intensity=0.5, tags=["sound"]),
+        Stimulus(content="a friendly voice says hello", intensity=0.6, tags=["voice", "friend"]),
+        Stimulus(
+            content="a sudden loud crash in the dark",
+            intensity=0.95,
+            tags=["sound", "threat", "alarm"],
+        ),
+        Stimulus(
+            content="the friendly voice returns, calm", intensity=0.6, tags=["voice", "friend"]
+        ),
+        Stimulus(content="a soft chime sounds nearby", intensity=0.5, tags=["sound"]),
+    ]
 
-    timeline = TimelineService(repo)
-    print("Detected timeline (u_demo):")
-    for seg in timeline.timeline("dev", "u_demo"):
-        mode = f" [{seg.transport_mode.value}]" if seg.transport_mode else ""
+    print(f"— {mind.settings.agent_name} awakens —\n")
+    results = mind.live(experience, idle_after=3)
+    for r in results:
+        m, rep = r.moment, r.report
         print(
-            f"  {seg.start:8.1f}s → {seg.end:8.1f}s  {seg.activity.value:<7}{mode}"
-            f"  {seg.distance_m/1000:6.2f} km  ({seg.window_count} windows)"
+            f"t{m.tick:<2} [{m.affect.emotion.value:<11}] "
+            f"v{m.affect.valence:+.2f} a{m.affect.arousal:.2f}  ·  {m.content}"
         )
-    print("\nSummary:", timeline.summary("dev", "u_demo"))
+        print(f"      ↳ {rep.text}  (confidence {rep.confidence:.2f})")
+    print("\n— self-model —")
+    s = mind.state()
+    print(f"  focus:     {s.current_focus}")
+    print(f"  mood:      valence {s.affect.mood_valence:+.2f}, arousal {s.affect.mood_arousal:.2f}")
+    drives = ", ".join(f"{d.value}:{v:.2f}" for d, v in s.drives.items())
+    print("  drives:    {" + drives + "}")
+    print(f"  narrative: {s.narrative}")
 
 
 def main() -> None:

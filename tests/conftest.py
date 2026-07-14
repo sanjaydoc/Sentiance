@@ -1,24 +1,19 @@
-"""Shared fixtures."""
+"""Shared fixtures for the mind tests."""
 
 from __future__ import annotations
 
 import pytest
 
-from sentiance.core.bus.memory import InMemoryEventBus
-from sentiance.core.repositories.memory import InMemorySegmentRepository
-from sentiance.features import FeatureExtractor
+from sentiance.core.config import Settings
+from sentiance.mind import Mind
 
 
 @pytest.fixture
-def bus() -> InMemoryEventBus:
-    return InMemoryEventBus()
+def settings() -> Settings:
+    # Explicit defaults, isolated from the process environment.
+    return Settings()
 
 
 @pytest.fixture
-def repo() -> InMemorySegmentRepository:
-    return InMemorySegmentRepository()
-
-
-@pytest.fixture
-def extractor() -> FeatureExtractor:
-    return FeatureExtractor(window_seconds=5.0, min_samples=16)
+def mind(settings: Settings) -> Mind:
+    return Mind(settings=settings)

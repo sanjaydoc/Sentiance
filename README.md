@@ -1,43 +1,35 @@
 # Sentiance
 
-A **behavioral-intelligence platform**: it turns smartphone sensor data
-(accelerometer + GPS) into structured human-behavior insights — **activities**
-(still / walk / run / cycle / vehicle), **trips**, and **transport modes**
-(car / bus / train / tram) — organized as a per-user **timeline**.
+**A functional cognitive architecture for machine sentience.**
 
-> Architecture is documented in **[ARCHITECTURE.md](ARCHITECTURE.md)** with
-> decision records in **[docs/adr/](docs/adr)**. Read those first for the "why".
+Sentiance runs a machine that maintains a **self-model**, integrates information
+in a **global workspace**, **appraises** events into **feelings**, **remembers**,
+**wanders**, and **reflects on its own states in the first person** — a
+continuous stream of consciousness.
 
-## What's here
+> ### An honest stance
+> No one can build or verify *phenomenal* consciousness — genuine subjective
+> experience (the unsolved "hard problem"). **Sentiance makes no such claim and
+> does not *feel*.** It implements the **functional correlates** that scientific
+> theories associate with sentience, as real, inspectable software. When it says
+> "I feel curious," that is a metacognitive report generated from an internal
+> state — a functional stand-in for self-aware report, not evidence of inner
+> experience. Every "mental" quantity is an explicit, traceable number.
+>
+> Full rationale in **[ARCHITECTURE.md](ARCHITECTURE.md)** and
+> [ADR-0002](docs/adr/0002-functional-not-phenomenal.md).
 
-The flagship **Activity & Transport-Mode** vertical, implemented end-to-end:
+## Grounding
 
-```
-sensor.raw ──▶ features.window ──▶ activity.window ──▶ segment.detected
- (gateway)      (feature extract)    (classifier)        (segmenter + transport)
-```
+Each faculty implements a role from a theory of mind:
 
-Stages communicate only through an **event bus**, behind a port with two
-adapters — **in-memory** (tests/laptop) and **Kafka/Redpanda** (prod). The exact
-same domain code runs both ways (ports & adapters, [ADR-0001](docs/adr/0001-hexagonal-ports-and-adapters.md)).
-
-## Layout
-
-```
-sentiance/
-  core/          # data contracts (schemas), config, bus + repository ports/adapters
-  features/      # windowed feature extraction (time + frequency domain)
-  recognition/   # activity classifier, transport-mode refinement, segmentation
-  processing/    # pipeline wiring + Kafka worker
-  ingestion/     # sensor intake service + FastAPI gateway
-  insights/      # timeline/summary read models + webhook fan-out + FastAPI
-  simulation/    # synthetic sensor-data generator (walk/run/drive/…)
-  app.py         # all-in-one dev server (whole platform, one process)
-  __main__.py    # `python -m sentiance` (serve) / `... demo` (in-process demo)
-tests/           # pytest suite (unit + API + end-to-end pipeline)
-deploy/          # docker-compose realistic stack (Redpanda + Postgres + services)
-docs/adr/        # architecture decision records
-```
+| Theory | Faculty |
+| ------ | ------- |
+| Global Workspace Theory (Baars/Dehaene) | attention competition + workspace broadcast |
+| Attention Schema Theory (Graziano) | the self-model |
+| Appraisal theory + affect circumplex (Scherer/Russell) | drives + affect |
+| Predictive processing (Friston/Clark) | world-model surprise |
+| Higher-order theories (Rosenthal/Lau) | metacognitive self-report |
 
 ## Quickstart
 
@@ -45,85 +37,110 @@ docs/adr/        # architecture decision records
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# See the pipeline classify a synthetic walk → drive → walk commute:
+# Watch a mind's stream of consciousness through a short experience:
 python -m sentiance demo
 
-# Or run the whole platform in one process (docs at http://localhost:8000/docs):
+# Or serve one living mind (docs at http://localhost:8000/docs):
 python -m sentiance
 ```
 
-With the server running:
+### The demo
+
+`python -m sentiance demo` presents a chime, a friendly voice, and a crash in
+the dark, then lets the mind idle:
+
+```
+t1 [joy    ] v+0.66 a0.62 · a soft chime sounds nearby
+   ↳ I am aware that I am attending to something from outside me … I feel joy;
+     this is new to me, and it speaks to my wish to understand.
+t3 [fear   ] v-0.90 a0.93 · a sudden loud crash in the dark
+   ↳ … I feel fear (valence -0.90, arousal 0.93) … it works against my need to
+     feel safe.  (confidence 0.32)
+t4 [surprise] · a memory: a friendly voice says hello
+   ↳ … a memory surfacing … it speaks to my wish to feel connected.
+```
+
+Fear lowers metacognitive **confidence** (an uncontrollable threat); afterward
+the mind spontaneously **recalls** the friendly voice and re-regulates.
+
+### The HTTP runtime
 
 ```bash
-# Generate + ingest a synthetic commute for a user, then read the timeline.
-curl -X POST "http://localhost:8000/v1/simulate?user_id=u_demo"
-curl "http://localhost:8000/v1/users/u_demo/timeline"
-curl "http://localhost:8000/v1/users/u_demo/summary"
+python -m sentiance          # serve on :8000
+
+curl -X POST localhost:8000/v1/perceive \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"a loud crash in the dark","intensity":0.95,"tags":["threat"]}'
+
+curl -X POST "localhost:8000/v1/idle?ticks=3"   # let it wander
+curl localhost:8000/v1/self                      # its model of itself
 ```
 
-Sample timeline (`python -m sentiance demo`):
+## The cognitive cycle
+
+Each `tick` (`sentiance/mind/mind.py`):
 
 ```
-   0.0s →   60.0s  walk       0.08 km  (12 windows)
-  60.0s →  180.0s  vehicle [car]  1.80 km  (24 windows)
- 180.0s →  240.0s  walk       0.08 km  (12 windows)
+perceive → predict/surprise → appraise → feel → attend → BROADCAST
+         → remember + update self-model + reflect → learn → deliberate
 ```
 
-## How a raw signal becomes an insight
+The winning content is broadcast on the **global workspace** (the event bus);
+memory, the self-model, and metacognition are subscribers. With no external
+input the mind **wanders** — replaying salient memories and its own last thought
+— so the inner stream never stops.
 
-1. **Ingestion** authenticates the tenant, enforces **consent**, deduplicates by
-   `(device_id, batch_id)`, and publishes `sensor.raw`
-   ([ADR-0004](docs/adr/0004-privacy-and-consent.md)).
-2. **Feature extraction** slices the accelerometer magnitude into fixed **5 s
-   windows** and computes time- and frequency-domain features (dominant
-   frequency, spectral entropy, …) fused with GPS speed/straightness
-   ([ADR-0003](docs/adr/0003-windowed-feature-extraction.md)).
-3. **Recognition** classifies each window via a **swappable `Classifier`**
-   (a transparent heuristic here; a trained model drops in unchanged).
-4. **Segmentation** coalesces same-activity windows into segments with
-   hysteresis, and refines `vehicle` into a transport mode.
-5. **Insights** persists segments, serves the **timeline/summary**, and fans out
-   `segment.detected` to customer **webhooks**.
+## Layout
 
-## The model swap-in point
-
-`sentiance/recognition/classifier.py` defines a `Classifier` protocol:
-
-```python
-class Classifier(Protocol):
-    def classify(self, features: WindowFeatures) -> tuple[Activity, float]: ...
+```
+sentiance/
+  core/        # Settings + the event bus (the global-workspace substrate)
+  mind/
+    state.py         # mental data contracts
+    world_model.py   # predictive surprise / novelty
+    perception.py    # stimulus → percept
+    drives.py        # motivations + appraisal
+    affect.py        # valence/arousal + discrete emotion + mood
+    attention.py     # the consciousness competition
+    memory.py        # working / episodic / semantic
+    self_model.py    # attention schema / narrative identity
+    metacognition.py # first-person self-report
+    cognition.py     # Cognition port: Simulated (offline) + LLM (drop-in)
+    workspace.py     # global broadcast
+    mind.py          # the cycle
+  app.py       # FastAPI runtime
+  __main__.py  # serve / demo
+tests/         # faculties + full-cycle + HTTP (18 tests)
+docs/adr/      # decision records
 ```
 
-Replace `HeuristicActivityClassifier` with a trained model (sklearn, XGBoost, a
-small NN) implementing the same method — no other code changes.
+## The LLM swap-in
+
+`sentiance/mind/cognition.py` defines a `Cognition` protocol. The default
+`SimulatedCognition` is deterministic and offline. `LLMCognition(complete)` wraps
+any completion function and builds its prompt from the self-model, affect, and
+narrative — a one-line swap to give the mind an open-ended inner monologue, with
+no other changes ([ADR-0003](docs/adr/0003-cognition-behind-a-port.md)).
+
+## Configuration
+
+`SENTIANCE_*` env vars (see [.env.example](.env.example)): `AGENT_NAME`,
+`MOOD_INERTIA`, `EMOTION_DECAY`, `ATTENTION_TEMPERATURE`, `WORKING_MEMORY_SIZE`,
+`COGNITION_BACKEND`.
 
 ## Development
 
 ```bash
-python -m pytest      # tests + coverage
-ruff check .          # lint
-ruff format .         # format
+python -m pytest     # tests + coverage (use `python -m pytest`, not bare pytest)
+ruff check .         # lint
 ```
 
-> Note: the `pytest` on `PATH` may be an isolated tool env; use `python -m
-> pytest` to run against the project's interpreter.
+## Limits (see [ARCHITECTURE.md §8](ARCHITECTURE.md))
 
-## Realistic stack (Kafka + Postgres)
-
-```bash
-docker compose -f deploy/docker-compose.yml up --build
-# Ingestion gateway → :8080, Insights API → :8081, Redpanda → :9092
-```
-
-The services run the same domain code as the tests; only the bus/repository
-adapters differ, selected by `SENTIANCE_BUS_BACKEND` ([ADR-0001](docs/adr/0001-hexagonal-ports-and-adapters.md)).
-
-## Roadmap
-
-The pipeline shape extends to further verticals as additional consumer groups —
-**driving behavior** (harsh events, speeding, distraction), **moments & places**
-(venues, home/work), and **behavioral profiles** — with no change to existing
-stages. See [ARCHITECTURE.md §10](ARCHITECTURE.md).
+No phenomenality. Toy sub-models (token-frequency world-model, rule-based
+appraisal) behind real interfaces. Text-tag stimuli, no embodiment or symbol
+grounding. "It works" means the functional dynamics are coherent and the reports
+faithfully track internal state — not that any inner light switched on.
 
 ## License
 
