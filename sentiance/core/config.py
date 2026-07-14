@@ -28,6 +28,10 @@ class Settings(BaseSettings):
 
     # Cognition backend: "simulated" (offline, deterministic) or "llm".
     cognition_backend: str = "simulated"
+    llm_model: str = "claude-opus-4-8"
+    llm_max_tokens: int = 256
+    # Falls back to the ANTHROPIC_API_KEY the SDK reads from the environment.
+    anthropic_api_key: str | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="SENTIANCE_",

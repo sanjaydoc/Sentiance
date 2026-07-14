@@ -17,9 +17,13 @@ Define a `Cognition` **port** — `deliberate(moment, source, self_model, memory
 
 - `SimulatedCognition` — deterministic, offline, template-driven by emotion and
   drives. The default; makes the whole system runnable and testable.
-- `LLMCognition` — constructs a prompt from the self-model + affect + narrative
-  and calls a user-supplied completion function (e.g. the Anthropic client).
-  Import-safe; used only when explicitly wired.
+- `LLMCognition` — an Anthropic-backed inner monologue. It composes a prompt
+  from the self-model + affect + drives + narrative and calls Claude
+  (default `claude-opus-4-8`) for the mind's next private thought. The client is
+  built lazily, so the package imports without the `anthropic` package or a key;
+  any failure (no key, network error, refusal) degrades gracefully to a fallback
+  voice so the cognitive cycle never stalls. Selected via
+  `SENTIANCE_COGNITION_BACKEND=llm`.
 
 ## Consequences
 

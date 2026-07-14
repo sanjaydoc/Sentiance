@@ -183,8 +183,10 @@ sentiance/
 
 ## 9. Roadmap
 
-- **LLM-backed cognition** (`LLMCognition`) for a genuinely open inner monologue,
-  with the self-model/affect state as its context.
+- **LLM-backed cognition** — *implemented* (`LLMCognition`): an Anthropic-backed
+  inner monologue conditioned on the self-model/affect/narrative, behind the same
+  `Cognition` port, with graceful fallback. Enable via
+  `SENTIANCE_COGNITION_BACKEND=llm`.
 - **Learned appraisal & world-model** replacing the rule/frequency stand-ins.
 - **Goals & planning** on top of drives (means-end deliberation).
 - **Persistence** — a durable autobiography across runs (identity over time).

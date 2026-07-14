@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sentiance.core.config import Settings, get_settings
 from sentiance.mind.affect import AffectSystem
 from sentiance.mind.attention import AttentionSystem
-from sentiance.mind.cognition import Cognition, SimulatedCognition
+from sentiance.mind.cognition import Cognition, build_cognition
 from sentiance.mind.drives import Drives
 from sentiance.mind.memory import Memory
 from sentiance.mind.metacognition import Metacognition
@@ -70,7 +70,7 @@ class Mind:
         )
         self.self_model = SelfModel(self.settings.agent_name)
         self.metacognition = Metacognition()
-        self.cognition = cognition or SimulatedCognition()
+        self.cognition = cognition or build_cognition(self.settings)
 
         self.affect = AffectState()
         self.tick_no = 0

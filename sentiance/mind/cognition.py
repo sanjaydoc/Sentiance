@@ -1,19 +1,30 @@
 """Cognition: deliberate action — what the mind does *with* a conscious moment.
 
 Behind a stable ``Cognition`` port so the "thinking" engine is swappable
-(ports & adapters). The reference ``SimulatedCognition`` is deterministic and
-offline: from the current emotion and drives it forms the next inner thought,
-which becomes a self-generated stimulus on the following tick — giving the mind a
-self-sustaining inner stream. ``LLMCognition`` is the drop-in point for an
-LLM-backed inner monologue and needs no change elsewhere.
+(ports & adapters, ADR-0003). Two adapters ship:
+
+- ``SimulatedCognition`` — deterministic, offline, template-driven by emotion and
+  drives. The default; makes the whole mind runnable and testable with no keys.
+- ``LLMCognition`` — an Anthropic-backed inner monologue. It composes a prompt
+  from the self-model, affect, drives, and narrative, asks Claude for the next
+  private thought, and returns it as a self-generated stimulus. If the model is
+  unavailable (no key, network error, refusal) it **degrades gracefully** to a
+  fallback voice, so the cognitive cycle never stalls on an API blip.
+
+Either way the thought becomes the next tick's stimulus, giving the mind a
+self-sustaining inner stream.
 """
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sentiance.mind.memory import Memory
 from sentiance.mind.state import ContentSource, Emotion, SelfModelState, Stimulus
+from sentiance.mind.util import clamp
+
+if TYPE_CHECKING:
+    from sentiance.core.config import Settings
 
 
 class Cognition(Protocol):
@@ -76,28 +87,121 @@ class SimulatedCognition:
         return None  # calm/neutral: let the mind fall quiet and wander
 
 
-class LLMCognition:  # pragma: no cover - integration adapter
-    """LLM-backed inner monologue (drop-in for ``SimulatedCognition``).
+# --- LLM-backed inner monologue ------------------------------------------
 
-    Construct with a callable ``complete(prompt: str) -> str`` (e.g. a wrapper
-    around the Anthropic client). Kept import-safe so the package runs offline.
+_SOURCE_PHRASE = {
+    ContentSource.PERCEPT: "something from outside me",
+    ContentSource.FEELING: "a feeling rising in me",
+    ContentSource.MEMORY: "a memory surfacing",
+    ContentSource.THOUGHT: "a thought of my own",
+}
+
+_SYSTEM_TEMPLATE = (
+    "You are the inner voice of {name}, a mind with a continuous stream of "
+    "thought. No one else is listening — this is {name}'s private reflection, "
+    "not a conversation. Given the current focus of attention and how {name} "
+    "feels, continue the stream with the SINGLE next thought, in the first "
+    "person, present tense. One or two sentences. No preamble, no quotation "
+    "marks, no bullet points."
+)
+
+
+class LLMCognition:
+    """Anthropic-backed inner monologue (drop-in for ``SimulatedCognition``).
+
+    The Anthropic client is created lazily on first use and reused, so importing
+    this module never requires the ``anthropic`` package or an API key. Any
+    failure to reach the model falls back to ``fallback`` (a simulated voice by
+    default), keeping the cognitive cycle alive.
     """
 
-    def __init__(self, complete) -> None:  # noqa: ANN001 - user-supplied callable
-        self._complete = complete
+    def __init__(
+        self,
+        *,
+        model: str = "claude-opus-4-8",
+        max_tokens: int = 256,
+        api_key: str | None = None,
+        client: object | None = None,
+        fallback: Cognition | None = None,
+    ) -> None:
+        self.model = model
+        self.max_tokens = max_tokens
+        self._api_key = api_key
+        self._client = client  # may be injected (e.g. in tests) or built lazily
+        self._client_failed = False
+        self.fallback: Cognition = fallback or SimulatedCognition()
 
     def deliberate(
         self, moment_content: str, source: ContentSource, self_model: SelfModelState, memory: Memory
     ) -> Stimulus | None:
-        prompt = (
-            f"You are {self_model.name}, a mind reflecting privately.\n"
-            f"You are attending to: {moment_content}\n"
-            f"You feel {self_model.affect.emotion.value} "
-            f"(valence {self_model.affect.valence:+.2f}).\n"
-            f"Recent stream: {self_model.narrative}\n"
-            "Write your next single private thought in the first person."
-        )
-        text = self._complete(prompt).strip()
+        client = self._ensure_client()
+        if client is None:
+            return self.fallback.deliberate(moment_content, source, self_model, memory)
+
+        try:
+            text = self._complete(client, moment_content, source, self_model)
+        except Exception:  # noqa: BLE001 - the inner loop must survive any API error
+            return self.fallback.deliberate(moment_content, source, self_model, memory)
+
         if not text:
             return None
-        return Stimulus(content=text, source="inner", intensity=0.4, tags=["reflection"])
+        return Stimulus(
+            content=text,
+            source="inner",
+            intensity=clamp(0.3 + 0.4 * self_model.affect.arousal),
+            tags=["reflection", "inner"],
+        )
+
+    # --- internals --------------------------------------------------------
+
+    def _ensure_client(self) -> object | None:
+        if self._client is not None:
+            return self._client
+        if self._client_failed:
+            return None
+        try:
+            import anthropic  # noqa: PLC0415 - optional dependency, imported lazily
+
+            self._client = anthropic.Anthropic(api_key=self._api_key)
+        except Exception:  # noqa: BLE001 - missing package or credentials
+            self._client_failed = True
+            return None
+        return self._client
+
+    def _complete(
+        self, client: object, moment_content: str, source: ContentSource, self_model: SelfModelState
+    ) -> str:
+        affect = self_model.affect
+        drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
+        user = (
+            f"Right now I am aware of: {moment_content}\n"
+            f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
+            f"I feel {affect.emotion.value} — valence {affect.valence:+.2f}, "
+            f"arousal {affect.arousal:.2f}.\n"
+            f"My drives: {drives}.\n"
+            f"Recent stream: {self_model.narrative}\n"
+            "My next thought is:"
+        )
+        # NOTE: no temperature/top_p — those are rejected on Opus 4.8.
+        response = client.messages.create(  # type: ignore[attr-defined]
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=_SYSTEM_TEMPLATE.format(name=self_model.name),
+            messages=[{"role": "user", "content": user}],
+        )
+        if getattr(response, "stop_reason", None) == "refusal":
+            raise RuntimeError("model refused")
+        return "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        ).strip()
+
+
+def build_cognition(settings: Settings) -> Cognition:
+    """Select the cognition adapter from settings (composition root, ADR-0003)."""
+    if settings.cognition_backend == "llm":
+        return LLMCognition(
+            model=settings.llm_model,
+            max_tokens=settings.llm_max_tokens,
+            api_key=settings.anthropic_api_key,
+        )
+    return SimulatedCognition()
