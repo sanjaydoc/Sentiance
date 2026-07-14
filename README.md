@@ -488,9 +488,25 @@ a fierce storm will come tonight #threat
 python scripts/prepare_data.py --traces data/traces.jsonl --out data
 ```
 
-It prints `traces read → clean examples (train / val)`. If it drops a lot, the
-data was repetitive — collect more variety, or lower `--similar-threshold`
-(default `0.85`; `0.6` is aggressive, `1.0` keeps exact-dups only).
+It prints the per-agent trace counts and `clean examples (train / val)`. If it
+drops a lot, the data was repetitive — collect more variety, or lower
+`--similar-threshold` (default `0.85`; `0.6` is aggressive, `1.0` keeps exact-dups
+only).
+
+**Whose voice? — blend vs one character.** Every run appends to the same file, so
+by default the model learns a *blended* Sentiance voice across everyone who ran
+(Iris, Milo, Rhea, Cass, Aria…). To train a model that **is one character** — a
+single coherent personality — filter to that mind's traces:
+
+```bash
+python scripts/prepare_data.py --traces data/traces.jsonl --out data --agent Cass
+```
+
+The per-agent counts tell you who has enough data to train on — a single-character
+model needs *that* mind to have produced most of the traces, so run it (in
+`society`, `live`, or `chat`) a lot first. Note the built-in choices differ in
+nature: **Cass** is anxious/pessimistic (a wary voice), **Iris** curious and
+sunny, **Rhea** even-keeled, **Aria** your lived-in default.
 
 **3. Fine-tune** — LoRA adapter saved to `models/sentiance-voice` (same command on
 every OS):

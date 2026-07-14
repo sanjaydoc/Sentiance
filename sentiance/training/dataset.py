@@ -62,6 +62,7 @@ def to_chat_example(row: dict) -> dict | None:
 def build_examples(
     rows: list[dict],
     *,
+    agent: str | None = None,
     min_thought_words: int = 3,
     dedup: bool = True,
     similar_threshold: float = 0.85,
@@ -72,11 +73,18 @@ def build_examples(
     **near**-duplicate thoughts (minds echoing each other), so the trained model
     doesn't learn to parrot. ``similar_threshold`` is the token-overlap (Jaccard)
     above which a thought counts as a near-echo of a recent one; set it to 1.0 to
-    keep only exact-duplicate filtering."""
+    keep only exact-duplicate filtering.
+
+    Pass ``agent`` (e.g. ``"Cass"``) to keep only *that* mind's deliberations —
+    training on one consistent character gives a single, coherent voice; leaving
+    it ``None`` blends everyone into a general Sentiance voice."""
+    want = agent.lower() if agent else None
     examples: list[dict] = []
     seen_norm: set[str] = set()
     recent: list[frozenset[str]] = []
     for row in rows:
+        if want is not None and (row.get("agent") or "").lower() != want:
+            continue
         thought = (row.get("thought") or "").strip()
         if len(thought.split()) < min_thought_words:
             continue
@@ -114,10 +122,21 @@ def write_jsonl(examples: list[dict], path: str | Path) -> None:
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
 
 
+def agent_counts(rows: list[dict]) -> dict[str, int]:
+    """How many trace rows each named mind produced — so you can see who has
+    enough data to train a single-character model."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        name = row.get("agent") or "?"
+        counts[name] = counts.get(name, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: kv[1], reverse=True))
+
+
 def prepare(
     traces_path: str | Path,
     out_dir: str | Path = "data",
     *,
+    agent: str | None = None,
     min_thought_words: int = 3,
     similar_threshold: float = 0.85,
     val_frac: float = 0.1,
@@ -126,11 +145,19 @@ def prepare(
     """Full pipeline: traces → cleaned examples → train/val files. Returns stats."""
     rows = load_traces(traces_path)
     examples = build_examples(
-        rows, min_thought_words=min_thought_words, similar_threshold=similar_threshold
+        rows, agent=agent, min_thought_words=min_thought_words,
+        similar_threshold=similar_threshold,
     )
     train, val = split(examples, val_frac=val_frac, seed=seed)
     out = Path(out_dir)
     write_jsonl(train, out / "train.jsonl")
     if val:
         write_jsonl(val, out / "val.jsonl")
-    return {"rows": len(rows), "examples": len(examples), "train": len(train), "val": len(val)}
+    return {
+        "rows": len(rows),
+        "examples": len(examples),
+        "train": len(train),
+        "val": len(val),
+        "by_agent": agent_counts(rows),
+        "agent": agent,
+    }

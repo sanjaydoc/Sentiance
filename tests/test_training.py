@@ -54,6 +54,21 @@ def test_near_duplicate_echoes_are_dropped() -> None:
     assert len(build_examples(rows, similar_threshold=1.0)) == len(echo)
 
 
+def test_agent_filter_keeps_one_character_for_a_coherent_voice() -> None:
+    from sentiance.training.dataset import agent_counts
+
+    rows = [
+        {"agent": "Cass", "system": "S", "prompt": "P1", "thought": "the shadows feel heavy"},
+        {"agent": "Iris", "system": "S", "prompt": "P2", "thought": "what a bright morning it is"},
+        {"agent": "Cass", "system": "S", "prompt": "P3", "thought": "I brace for what comes next"},
+    ]
+    assert agent_counts(rows) == {"Cass": 2, "Iris": 1}
+    assert len(build_examples(rows)) == 3  # blended: everyone
+    assert len(build_examples(rows, agent="Cass")) == 2  # only Cass (case-insensitive)
+    assert len(build_examples(rows, agent="cass")) == 2
+    assert len(build_examples(rows, agent="Nobody")) == 0
+
+
 def test_split_is_deterministic_and_holds_out_validation() -> None:
     examples = [{"messages": [{"role": "user", "content": str(i)}]} for i in range(100)]
     a1, b1 = split(examples, seed=0)
