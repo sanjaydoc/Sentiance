@@ -424,47 +424,45 @@ pip install -e ".[finetune]"
 **1. Collect a *diverse* dataset.** Quality beats quantity for a 0.5B: a few
 hundred **varied** deliberations — different situations, emotions, and people
 across `society` + `live` + `chat` — teach the voice far better than thousands of
-near-identical ones. Point `SENTIANCE_TRACE_PATH` at one file and every run
-appends to it. Use the `ollama` voice for the richest text.
+near-identical ones. `--trace` logs to one file (default `data/traces.jsonl`) that
+every run appends to; `--as <Name>` runs a named nature in one word (Iris / Milo /
+Rhea / Cass / Aria, or any name). Use the `ollama` voice for the richest text.
 
 **macOS / Linux (bash/zsh):**
 
 ```bash
 export SENTIANCE_COGNITION_BACKEND=ollama
-export SENTIANCE_TRACE_PATH=data/traces.jsonl
 
 # social / emotional / relational data — run a few times (they meet, bond, part)
-python -m sentiance society
-python -m sentiance society
+python -m sentiance society --trace
+python -m sentiance society --trace
 
-# a solo mind exploring the world — and a different *nature* for variety
-python -m sentiance live
-SENTIANCE_AGENT_NAME=Cass SENTIANCE_TEMPERAMENT_ANXIETY=0.9 \
-  SENTIANCE_TEMPERAMENT_OPTIMISM=0.2 python -m sentiance live
+# solo minds exploring the world — a few different natures for variety
+python -m sentiance live --as Iris --trace
+python -m sentiance live --as Milo --trace
+python -m sentiance live --as Cass --trace
 
 # hand-fed situations chat gives you full control over (see the recipe below)
-python -m sentiance chat
+python -m sentiance chat --trace
 ```
 
-**Windows (cmd)** — `set` each var on its own line, then run:
+**Windows (cmd)** — set the voice once, then the flags do the rest:
 
 ```cmd
 set SENTIANCE_COGNITION_BACKEND=ollama
-set SENTIANCE_TRACE_PATH=data\traces.jsonl
 
-python -m sentiance society
-python -m sentiance society
-python -m sentiance live
-python -m sentiance chat
-
-REM a different nature (clear the vars after, or open a new terminal)
-set SENTIANCE_AGENT_NAME=Cass
-set SENTIANCE_TEMPERAMENT_ANXIETY=0.9
-set SENTIANCE_TEMPERAMENT_OPTIMISM=0.2
-python -m sentiance live
+python -m sentiance society --trace
+python -m sentiance society --trace
+python -m sentiance live --as Iris --trace
+python -m sentiance live --as Milo --trace
+python -m sentiance live --as Cass --trace
+python -m sentiance chat --trace
 ```
 
-**Windows (PowerShell):** `$env:SENTIANCE_COGNITION_BACKEND="ollama"; $env:SENTIANCE_TRACE_PATH="data\traces.jsonl"` then run the same commands.
+**Windows (PowerShell):** `$env:SENTIANCE_COGNITION_BACKEND="ollama"` then run the
+same `python -m sentiance … --trace` commands. (`--as`/`--trace` are shortcuts for
+the `SENTIANCE_AGENT_NAME` / `TEMPERAMENT_*` / `TRACE_PATH` env vars, which still
+work if you prefer to set them by hand.)
 
 In `chat`, type situations that span the emotional range (each line is a fresh
 labelled example), e.g.:
@@ -615,9 +613,10 @@ sentiance/
   chat.py      # interactive REPL (streaming, persistent)
   live.py      # let the mind live in the world
   society.py   # several minds share the house, meet, talk, and bond
+  characters.py# named temperament presets (Iris/Milo/Rhea/Cass/Aria) for --as
   trace.py     # export deliberations as a training dataset (Path A/B)
   training/    # dataset.py: traces → chat-format fine-tuning examples (pure Python)
-  __main__.py  # serve / demo / chat / live / society
+  __main__.py  # serve / demo / chat / live / society (+ --as, --trace)
 scripts/       # prepare_data.py + finetune.py (LoRA, 6 GB-tuned) — the [finetune] extra
 tests/         # 160 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training
 docs/adr/      # decision records
