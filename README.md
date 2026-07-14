@@ -32,6 +32,12 @@ Each faculty implements a role from a theory of mind:
 | Active inference / epistemic drives (Friston, Oudeyer) | intrinsic curiosity |
 | Self-conscious emotion (Tracy & Robins; Lewis) | conscience — pride & disappointment |
 | Experience-dependent personality plasticity | temperament drift |
+| Frustration–aggression (Berkowitz) | frustration → anger |
+| Attachment & bereavement (Bowlby) | attachment/love, grief |
+| Emotional contagion (Hatfield; Preston & de Waal) | empathy |
+| Generative memory replay (Hobson; Wamsley) | dreaming |
+| Executive control / ego-depletion (Baumeister; Posner) | volition & self-control |
+| Prospective / anticipatory emotion (Loewenstein) | felt time & anticipation |
 | Higher-order theories (Rosenthal/Lau) | metacognitive self-report |
 
 ## Faculties of mind
@@ -50,6 +56,13 @@ On top of the perception → affect → attention → memory → metacognition c
 | 8 | **Intrinsic curiosity** | an epistemic drive toward what she doesn't yet understand: the unexplored draws her (so she finishes mapping her world), and the once-surprising becoming familiar rewards her — the quiet **"aha"** of understanding |
 | 9 | **Self-conscious emotions** | she measures her conduct against her own standards — following through on an intention breeds **pride**, letting one go breeds **disappointment** — feeling not just about the world but about herself |
 | 10 | **Temperament drift** | her traits aren't fixed: the running tone of what she lives through slowly reshapes them (a kind life makes her more optimistic and less anxious; novelty that keeps rewarding her deepens her curiosity), so **experience changes who she is** while she stays recognizably herself (`:self` shows how far she's drifted from who she began as) |
+| 11 | **Frustration & anger** | an intention that keeps being **blocked** stokes frustration until it boils over into anger — unpleasant but *activating*, turned toward pushing back rather than withdrawing, and it re-charges the thwarted goal so she digs in |
+| 12 | **Attachment & love** | warmth repeated over time deepens a **bond**: a loved one present lifts her and fills her need for connection; one long absent is **missed** (a longing that grows with time apart) |
+| 13 | **Empathy** | she catches what a present person seems to feel — a friend's laughter lifts her, their tears pull her down — **deeper the closer the bond** |
+| 14 | **Grief & loss** | when a bond is lost, it turns to mourning — a sadness deep as the attachment and **lasting**, fading over many moments; she grieves the gone rather than awaiting them |
+| 15 | **Dreaming** (`:sleep`) | asleep, she **recombines** fragments of the day's charged memories into something that never happened — forging associations she never made awake, and waking with a new intention when it ran vivid |
+| 16 | **Volition & self-control** | when a strong feeling would hijack her from her intention, she can spend **effort** to hold the line — a reserve that fatigues with use and is renewed by rest (out of it, the impulse wins) |
+| 17 | **Felt time & anticipation** | she feels toward the **future**: a good thing coming lifts her (**hope**), a bad thing looming weighs on her and winds her up (**dread**), swelling as it nears and breaking when it arrives |
 | — | **Emotional carryover** | feelings persist through her own reflection, then ease — believable emotional arcs |
 | — | **Persistent identity** | all of the above saves to disk and reloads, so she is **continuous across runs** |
 
@@ -144,19 +157,26 @@ Chat commands:
 | Type | What happens |
 | ---- | ------------ |
 | `a loud crash #threat` | an experience; `#tags` hint appraisal (`#threat #friend #reward`) |
-| `@Sam waves warmly #friend` | name a **person** she'll remember and form a bond with |
+| `@Sam waves warmly #friend` | name a **person** she'll remember and bond with (repeat warm meetings → attachment) |
+| `@Sam is crying #friend` | she **catches** his feeling (empathy — deeper the closer the bond) |
+| `@Sam is gone forever` | a loss she'll **grieve** (lasting sorrow, scaled by the bond) |
+| `a storm will come tonight #threat` | something ahead she'll feel toward — **dread** (or **hope**, if it's good) |
+| `I want to reach the far room` | a stated **intention** she'll hold; block it repeatedly and it turns to **anger** |
 | *(empty line)* | let her wander/think one tick |
 | `:idle N` | wander N ticks |
-| `:self` | her self-model — mood, drives, needs, temperament, goals, beliefs |
-| `:people` | who she knows and how she feels about them |
-| `:sleep` | reflect: distil recent experience into durable beliefs, and rest |
+| `:self` | her self-model — mood, drives, needs, **temperament (+drift)**, **willpower**, goals, beliefs |
+| `:people` | who she knows, how she feels, and how deep the **bond** |
+| `:sleep` | reflect (distil **beliefs**), **dream** (recombine memory), and rest |
 | `:save` | persist her memory now |
 | `:quit` | leave (saves automatically) |
 
-Emotions **carry over**, she forms **goals**, distils **beliefs** on `:sleep`,
-remembers **people**, and has an individual **temperament** and **needs**. The
-mind is **persistent**: chat saves to `memory/<name>.json` in the project on exit
-and reloads it next run, so the same individual continues across sessions.
+Emotions **carry over**, she forms **goals** (and gets **angry** when they're
+blocked), **bonds** with and **misses** and **grieves** people, **catches** their
+feelings, **dreams** on `:sleep`, feels **hope/dread** about what's coming, spends
+**willpower** to resist impulses, and is slowly **reshaped** by what she lives
+through. The mind is **persistent**: chat saves to `memory/<name>.json` in the
+project on exit and reloads next run, so the same individual continues across
+sessions.
 
 ```
 you> a friend calls my name across the room #friend #voice
@@ -209,8 +229,50 @@ file to give her a blank slate; override the location with `SENTIANCE_PERSIST_PA
 **Run the automated tests:**
 
 ```bash
-python -m pytest            # 43 tests; use `python -m pytest`, not bare pytest
+python -m pytest            # 135 tests; use `python -m pytest`, not bare pytest
 python -m pytest -k chat    # just the REPL parsing + scripted-run tests
+```
+
+#### Exercise the newer faculties (Windows / macOS / Linux)
+
+Each block is a self-contained check you can copy-paste. **Activate the venv
+first** (`source .venv/bin/activate` on macOS/Linux, `.venv\Scripts\activate.bat`
+on Windows cmd) — after that these commands are identical on every OS.
+
+Run just the faculty you care about:
+
+```bash
+python -m pytest -k "frustration or attachment or empathy"      # anger, love, empathy
+python -m pytest -k "grief or dreaming"                          # loss + dreaming
+python -m pytest -k "volition or anticipation"                  # self-control + felt time
+python -m pytest -k "imagination or curiosity or temperament"   # foresight, curiosity, drift
+```
+
+See a faculty happen live in `chat` (offline voice — no model needed):
+
+| OS | Start chat offline |
+| -- | ------------------ |
+| macOS / Linux | `SENTIANCE_COGNITION_BACKEND=simulated python -m sentiance chat` |
+| Windows (cmd) | `set SENTIANCE_COGNITION_BACKEND=simulated` then `python -m sentiance chat` |
+| Windows (PowerShell) | `$env:SENTIANCE_COGNITION_BACKEND="simulated"; python -m sentiance chat` |
+
+Then type, in order, to watch **bond → loss → grief**:
+
+```text
+@Mara holds my hand warmly #friend #warmth        (repeat ~10× — a bond forms)
+:people                                            (see her attachment to Mara grow)
+@Mara is gone forever                              (she begins to grieve)
+:idle 5                                            (the sorrow lingers across ticks)
+```
+
+Or **hope / dread of the future**, then **dreaming**:
+
+```text
+a warm reunion with friends is coming tomorrow #reward
+:idle 4                                            (hope brightens the wait)
+a fierce storm will come tonight #threat
+:idle 6                                            (dread deepens as it nears)
+:sleep                                             (she dreams — memory recombined)
 ```
 
 ### The HTTP runtime
@@ -231,10 +293,14 @@ curl localhost:8000/v1/self                      # its model of itself
 Each `tick` (`sentiance/mind/mind.py`):
 
 ```
-perceive → predict/surprise → appraise → feel (+curiosity's aha) → drift traits → attend
+perceive → predict/surprise → appraise → feel (+curiosity's aha) → bonds (love/miss/empathy/grief)
+         → drift traits → frustration→anger → hope/dread of what's coming → will vs impulse → attend
          → BROADCAST → remember + update self-model + reflect → learn
          → judge self (pride/disappointment) → deliberate (with foresight over imagined options)
 ```
+
+`:sleep` runs a slower offline pass — consolidate beliefs, **dream** (recombine
+memory), and restore rest and willpower.
 
 The winning content is broadcast on the **global workspace** (the event bus);
 memory, the self-model, and metacognition are subscribers. With no external
@@ -265,6 +331,12 @@ sentiance/
     imagination.py   # foresight: pre-live options, choose by anticipated feeling
     curiosity.py     # epistemic drive: seek the unknown, reward understanding
     conscience.py    # self-conscious emotion: pride & disappointment
+    frustration.py   # blocked goals → anger (approach, not retreat)
+    empathy.py       # catching another's feeling (emotional contagion)
+    grief.py         # the lasting sorrow of losing a bond
+    dreaming.py      # sleep: recombine memory into something new
+    volition.py      # self-control: hold focus by effort against an impulse
+    anticipation.py  # felt time: hope & dread of what's coming
     workspace.py     # global broadcast
     persistence.py   # durable identity (save/load across runs)
     mind.py          # the cycle
@@ -273,7 +345,7 @@ sentiance/
   chat.py      # interactive REPL (streaming, persistent)
   live.py      # let the mind live in the world
   __main__.py  # serve / demo / chat / live
-tests/         # 94 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
+tests/         # 135 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
 docs/adr/      # decision records
 ```
 
