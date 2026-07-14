@@ -37,6 +37,24 @@ _SOURCE_PHRASE = {
 }
 
 
+# Rotated deterministically by tick so the inner voice doesn't sound identical
+# every moment (variety without randomness — reports stay reproducible/testable).
+_OPENERS = (
+    'I am aware that I am attending to {src} — "{c}".',
+    'My attention settles on {src} — "{c}".',
+    'I notice {src}: "{c}".',
+    'It is {src} that holds me now — "{c}".',
+)
+_FEELINGS = (
+    "I feel {e} (valence {v:+.2f}, arousal {a:.2f}).",
+    "There is {e} in me — valence {v:+.2f}, arousal {a:.2f}.",
+    "What rises is {e} ({v:+.2f} / {a:.2f}).",
+)
+_VERBS_POS = ("it answers", "it feeds", "it speaks to", "it serves")
+_VERBS_NEG = ("it works against", "it unsettles", "it strains", "it presses on")
+_VERBS_NEUTRAL = ("it brushes against", "it touches on", "it stirs", "it circles")
+
+
 class Metacognition:
     def reflect(
         self,
@@ -46,14 +64,15 @@ class Metacognition:
         dominant_drive: Drive,
     ) -> IntrospectiveReport:
         affect = moment.affect
-        reason = self._reason(appraisal, dominant_drive)
+        i = max(0, moment.tick - 1)  # tick 1 → index 0 keeps "I am aware …" first
         source = _SOURCE_PHRASE[moment.source]
 
-        text = (
-            f"I am aware that I am attending to {source} — \"{moment.content}\". "
-            f"I feel {affect.emotion.value} "
-            f"(valence {affect.valence:+.2f}, arousal {affect.arousal:.2f}); {reason}."
+        opener = _OPENERS[i % len(_OPENERS)].format(src=source, c=moment.content)
+        feeling = _FEELINGS[i % len(_FEELINGS)].format(
+            e=affect.emotion.value, v=affect.valence, a=affect.arousal
         )
+        reason = self._reason(appraisal, dominant_drive, i)
+        text = f"{opener} {feeling} {reason}"
         if affect.emotion is Emotion.CONFUSION:
             text += " I notice I can't quite place this yet."
 
@@ -70,16 +89,18 @@ class Metacognition:
         )
 
     @staticmethod
-    def _reason(appraisal: Appraisal, drive: Drive) -> str:
+    def _reason(appraisal: Appraisal, drive: Drive, i: int) -> str:
         phrase = _DRIVE_PHRASE[drive]
         if appraisal.goal_congruence > 0.15:
-            stance = f"it speaks to {phrase}"
+            stance = f"{_VERBS_POS[i % len(_VERBS_POS)]} {phrase}"
         elif appraisal.goal_congruence < -0.15:
-            stance = f"it works against {phrase}"
+            stance = f"{_VERBS_NEG[i % len(_VERBS_NEG)]} {phrase}"
         else:
-            stance = f"it touches on {phrase}"
+            stance = f"{_VERBS_NEUTRAL[i % len(_VERBS_NEUTRAL)]} {phrase}"
+
+        # Novelty decays as themes recur, so the mind increasingly recognizes them.
         if appraisal.novelty >= 0.6:
-            return f"this is new to me, and {stance}"
-        if appraisal.novelty <= 0.25:
-            return f"this feels familiar, and {stance}"
-        return stance
+            return f"This is new to me, and {stance}."
+        if appraisal.novelty <= 0.3:
+            return f"This feels familiar by now, and {stance}."
+        return f"{stance[0].upper()}{stance[1:]}."

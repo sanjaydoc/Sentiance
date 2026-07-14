@@ -15,7 +15,7 @@ from sentiance.mind.util import clamp, tokenize
 
 
 class WorldModel:
-    def __init__(self, smoothing: float = 2.0) -> None:
+    def __init__(self, smoothing: float = 1.0) -> None:
         self._counts: Counter[str] = Counter()
         self._observations = 0
         self._smoothing = smoothing
