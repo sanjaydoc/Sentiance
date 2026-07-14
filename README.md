@@ -1,114 +1,129 @@
 # Sentiance
 
-A small, production-shaped **FastAPI** service for text sentiment analysis.
+A **behavioral-intelligence platform**: it turns smartphone sensor data
+(accelerometer + GPS) into structured human-behavior insights — **activities**
+(still / walk / run / cycle / vehicle), **trips**, and **transport modes**
+(car / bus / train / tram) — organized as a per-user **timeline**.
 
-It ships with a dependency-free, lexicon-based analyzer so the project runs and
-tests out of the box — swap in a real model (transformer, hosted API, etc.)
-behind the same interface without touching the HTTP layer.
+> Architecture is documented in **[ARCHITECTURE.md](ARCHITECTURE.md)** with
+> decision records in **[docs/adr/](docs/adr)**. Read those first for the "why".
 
-## Features
+## What's here
 
-- **FastAPI** app with automatic OpenAPI docs at `/docs`.
-- Single and batch analysis endpoints.
-- Typed request/response models with **Pydantic v2**.
-- Environment-based configuration via **pydantic-settings**.
-- Tests with **pytest** + coverage, linting with **ruff**.
-- **Dockerfile**, **docker-compose**, and a **GitHub Actions** CI pipeline.
-
-## Project layout
+The flagship **Activity & Transport-Mode** vertical, implemented end-to-end:
 
 ```
-app/
-  __init__.py       # package + version
-  __main__.py       # `python -m app` / `sentiance` entry point
-  config.py         # Settings (SENTIANCE_* env vars)
-  main.py           # app factory + ASGI `app`
-  routes.py         # HTTP endpoints
-  schemas.py        # Pydantic models
-  sentiment.py      # the analyzer (swap-in point)
-tests/              # pytest suite
-Dockerfile
-docker-compose.yml
-.github/workflows/ci.yml
+sensor.raw ──▶ features.window ──▶ activity.window ──▶ segment.detected
+ (gateway)      (feature extract)    (classifier)        (segmenter + transport)
+```
+
+Stages communicate only through an **event bus**, behind a port with two
+adapters — **in-memory** (tests/laptop) and **Kafka/Redpanda** (prod). The exact
+same domain code runs both ways (ports & adapters, [ADR-0001](docs/adr/0001-hexagonal-ports-and-adapters.md)).
+
+## Layout
+
+```
+sentiance/
+  core/          # data contracts (schemas), config, bus + repository ports/adapters
+  features/      # windowed feature extraction (time + frequency domain)
+  recognition/   # activity classifier, transport-mode refinement, segmentation
+  processing/    # pipeline wiring + Kafka worker
+  ingestion/     # sensor intake service + FastAPI gateway
+  insights/      # timeline/summary read models + webhook fan-out + FastAPI
+  simulation/    # synthetic sensor-data generator (walk/run/drive/…)
+  app.py         # all-in-one dev server (whole platform, one process)
+  __main__.py    # `python -m sentiance` (serve) / `... demo` (in-process demo)
+tests/           # pytest suite (unit + API + end-to-end pipeline)
+deploy/          # docker-compose realistic stack (Redpanda + Postgres + services)
+docs/adr/        # architecture decision records
 ```
 
 ## Quickstart
 
 ```bash
-# 1. Create a virtual environment and install (with dev extras)
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# 2. Run the service (hot reload in development)
-python -m app
-# or
-uvicorn app.main:app --reload
+# See the pipeline classify a synthetic walk → drive → walk commute:
+python -m sentiance demo
 
-# 3. Open the interactive docs
-open http://localhost:8000/docs
+# Or run the whole platform in one process (docs at http://localhost:8000/docs):
+python -m sentiance
 ```
 
-## API
-
-### `GET /health`
-
-```json
-{ "status": "ok", "app": "Sentiance", "version": "0.1.0", "environment": "development" }
-```
-
-### `POST /analyze`
+With the server running:
 
 ```bash
-curl -X POST http://localhost:8000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"text": "I love this product!"}'
+# Generate + ingest a synthetic commute for a user, then read the timeline.
+curl -X POST "http://localhost:8000/v1/simulate?user_id=u_demo"
+curl "http://localhost:8000/v1/users/u_demo/timeline"
+curl "http://localhost:8000/v1/users/u_demo/summary"
 ```
 
-```json
-{ "text": "I love this product!", "sentiment": "positive", "score": 0.2 }
+Sample timeline (`python -m sentiance demo`):
+
+```
+   0.0s →   60.0s  walk       0.08 km  (12 windows)
+  60.0s →  180.0s  vehicle [car]  1.80 km  (24 windows)
+ 180.0s →  240.0s  walk       0.08 km  (12 windows)
 ```
 
-### `POST /analyze/batch`
+## How a raw signal becomes an insight
 
-```bash
-curl -X POST http://localhost:8000/analyze/batch \
-  -H "Content-Type: application/json" \
-  -d '{"texts": ["I love it", "I hate it", "it exists"]}'
+1. **Ingestion** authenticates the tenant, enforces **consent**, deduplicates by
+   `(device_id, batch_id)`, and publishes `sensor.raw`
+   ([ADR-0004](docs/adr/0004-privacy-and-consent.md)).
+2. **Feature extraction** slices the accelerometer magnitude into fixed **5 s
+   windows** and computes time- and frequency-domain features (dominant
+   frequency, spectral entropy, …) fused with GPS speed/straightness
+   ([ADR-0003](docs/adr/0003-windowed-feature-extraction.md)).
+3. **Recognition** classifies each window via a **swappable `Classifier`**
+   (a transparent heuristic here; a trained model drops in unchanged).
+4. **Segmentation** coalesces same-activity windows into segments with
+   hysteresis, and refines `vehicle` into a transport mode.
+5. **Insights** persists segments, serves the **timeline/summary**, and fans out
+   `segment.detected` to customer **webhooks**.
+
+## The model swap-in point
+
+`sentiance/recognition/classifier.py` defines a `Classifier` protocol:
+
+```python
+class Classifier(Protocol):
+    def classify(self, features: WindowFeatures) -> tuple[Activity, float]: ...
 ```
 
-## Configuration
-
-Settings are read from the environment (prefix `SENTIANCE_`) or a local `.env`
-file. See [`.env.example`](.env.example).
-
-| Variable                  | Default       | Description                       |
-| ------------------------- | ------------- | -------------------------------- |
-| `SENTIANCE_APP_NAME`      | `Sentiance`   | Service name shown in docs/health |
-| `SENTIANCE_ENVIRONMENT`   | `development` | `development` enables hot reload  |
-| `SENTIANCE_LOG_LEVEL`     | `INFO`        | uvicorn log level                 |
+Replace `HeuristicActivityClassifier` with a trained model (sklearn, XGBoost, a
+small NN) implementing the same method — no other code changes.
 
 ## Development
 
 ```bash
-pytest          # run tests with coverage
-ruff check .    # lint
-ruff format .   # format
+python -m pytest      # tests + coverage
+ruff check .          # lint
+ruff format .         # format
 ```
 
-## Docker
+> Note: the `pytest` on `PATH` may be an isolated tool env; use `python -m
+> pytest` to run against the project's interpreter.
+
+## Realistic stack (Kafka + Postgres)
 
 ```bash
-docker compose up --build
-# service available at http://localhost:8000
+docker compose -f deploy/docker-compose.yml up --build
+# Ingestion gateway → :8080, Insights API → :8081, Redpanda → :9092
 ```
 
-## Swapping in a real model
+The services run the same domain code as the tests; only the bus/repository
+adapters differ, selected by `SENTIANCE_BUS_BACKEND` ([ADR-0001](docs/adr/0001-hexagonal-ports-and-adapters.md)).
 
-`app/sentiment.py` exposes a `SentimentAnalyzer` with a single
-`analyze(text) -> AnalyzeResponse` method and a module-level `analyzer`
-singleton used by the routes. Replace the implementation (e.g. load a
-Hugging Face pipeline or call an external API) while keeping that interface and
-the rest of the app is unchanged.
+## Roadmap
+
+The pipeline shape extends to further verticals as additional consumer groups —
+**driving behavior** (harsh events, speeding, distraction), **moments & places**
+(venues, home/work), and **behavioral profiles** — with no change to existing
+stages. See [ARCHITECTURE.md §10](ARCHITECTURE.md).
 
 ## License
 

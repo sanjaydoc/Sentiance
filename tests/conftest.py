@@ -1,13 +1,24 @@
-"""Shared pytest fixtures."""
+"""Shared fixtures."""
 
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import create_app
+from sentiance.core.bus.memory import InMemoryEventBus
+from sentiance.core.repositories.memory import InMemorySegmentRepository
+from sentiance.features import FeatureExtractor
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(create_app())
+def bus() -> InMemoryEventBus:
+    return InMemoryEventBus()
+
+
+@pytest.fixture
+def repo() -> InMemorySegmentRepository:
+    return InMemorySegmentRepository()
+
+
+@pytest.fixture
+def extractor() -> FeatureExtractor:
+    return FeatureExtractor(window_seconds=5.0, min_samples=16)

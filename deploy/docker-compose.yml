@@ -1,0 +1,87 @@
+# Realistic local stack: Redpanda (Kafka API) + Postgres + the platform services.
+# The same domain code runs here as in-process tests — only the bus/repo adapters
+# differ (ADR-0001). Build context is the repo root.
+#
+#   docker compose -f deploy/docker-compose.yml up --build
+#
+# Ingestion gateway → :8080, Insights API → :8081.
+
+name: sentiance
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.1.7
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sentiance
+      POSTGRES_PASSWORD: sentiance
+      POSTGRES_DB: sentiance
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentiance"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ingestion:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: >-
+      uvicorn sentiance.ingestion.app:app --host 0.0.0.0 --port 8080
+    environment:
+      SENTIANCE_ENVIRONMENT: production
+      SENTIANCE_BUS_BACKEND: kafka
+      SENTIANCE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  processing:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: python -m sentiance.processing.worker
+    environment:
+      SENTIANCE_BUS_BACKEND: kafka
+      SENTIANCE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  insights:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: >-
+      uvicorn sentiance.insights.app:app --host 0.0.0.0 --port 8081
+    environment:
+      SENTIANCE_BUS_BACKEND: kafka
+      SENTIANCE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      SENTIANCE_POSTGRES_DSN: postgresql://sentiance:sentiance@postgres:5432/sentiance
+    ports:
+      - "8081:8081"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy

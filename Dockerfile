@@ -8,13 +8,14 @@ WORKDIR /app
 
 # Install dependencies first for better layer caching.
 COPY pyproject.toml README.md ./
-COPY app ./app
-RUN pip install --upgrade pip && pip install .
+COPY sentiance ./sentiance
+RUN pip install --upgrade pip && pip install ".[kafka]"
 
 EXPOSE 8000
 
-# Run a non-root user for safety.
+# Run as a non-root user.
 RUN useradd --create-home appuser
 USER appuser
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default: the all-in-one server. Compose overrides the command per service.
+CMD ["uvicorn", "sentiance.app:app", "--host", "0.0.0.0", "--port", "8000"]
