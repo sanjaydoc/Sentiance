@@ -156,6 +156,11 @@ class World:
             return None
         return self._step(path[1])
 
+    def head_to(self, dest: str) -> str | None:
+        """Take a single step along the shortest path toward ``dest`` (any room,
+        not just an adjacent one). Public wrapper over the pathfinder."""
+        return self._go_toward(dest)
+
     def _affordance_target(self, text: str) -> str | None:
         """Which room best satisfies what the thought is reaching for?"""
         words = set(re.findall(r"[a-z]+", text.lower()))

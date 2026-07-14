@@ -7,6 +7,8 @@
                                     the mind perceive, feel, remember, and think
 - ``python -m sentiance live``   → let the mind live in a small world it senses
                                     and acts in (rooms, objects, day/night)
+- ``python -m sentiance society``→ several minds share the house and meet, talk,
+                                    and bond (emergent — only the world connects them)
 """
 
 from __future__ import annotations
@@ -65,6 +67,11 @@ def main() -> None:
         from sentiance.live import run_live
 
         run_live()
+        return
+    if command in ("society", "meet"):
+        from sentiance.society import run_society
+
+        run_society()
         return
 
     import uvicorn

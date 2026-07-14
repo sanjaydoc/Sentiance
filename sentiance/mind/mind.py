@@ -270,7 +270,7 @@ class Mind:
         # *thinking* of someone still colours the feeling, but only an external
         # encounter counts as them actually being *present* (§3b) — otherwise she
         # could never miss anyone, since remembering them would summon them.
-        people = extract_people(percept.content)
+        people = [p for p in extract_people(percept.content) if p != self.self_model.name]
         present = [] if percept.internal else people
         prior = self.relationships.prior(people)
         if prior is not None and percept.valence_hint is None:

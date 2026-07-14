@@ -96,10 +96,11 @@ pip install -e ".[dev]"
 The commands below are identical on every OS once the venv is active:
 
 ```bash
-python -m sentiance demo    # watch a scripted stream of consciousness
-python -m sentiance chat    # talk to her: type experiences, she feels/remembers/thinks
-python -m sentiance live    # let her live in a small world she senses and acts in
-python -m sentiance         # serve one mind (HTTP; docs at http://localhost:8000/docs)
+python -m sentiance demo     # watch a scripted stream of consciousness
+python -m sentiance chat     # talk to her: type experiences, she feels/remembers/thinks
+python -m sentiance live     # let her live in a small world she senses and acts in
+python -m sentiance society  # several minds share the house — they meet, talk, and bond
+python -m sentiance          # serve one mind (HTTP; docs at http://localhost:8000/docs)
 ```
 
 ### Give her a local LLM voice (optional, recommended)
@@ -229,7 +230,7 @@ file to give her a blank slate; override the location with `SENTIANCE_PERSIST_PA
 **Run the automated tests:**
 
 ```bash
-python -m pytest            # 135 tests; use `python -m pytest`, not bare pytest
+python -m pytest            # 143 tests; use `python -m pytest`, not bare pytest
 python -m pytest -k chat    # just the REPL parsing + scripted-run tests
 ```
 
@@ -297,6 +298,42 @@ a fierce storm will come tonight #threat
 :idle 6                                            (dread deepens as it nears)
 :sleep                                             (she dreams — memory recombined)
 ```
+
+### Many minds — a society (`society`)
+
+```bash
+python -m sentiance society
+```
+
+Several minds share the **same house** — three by default (curious, sunny **Iris**;
+anxious **Milo**; even-keeled **Rhea**), each waking in a different room. No two
+minds are wired together; the only thing between them is the world. When two end
+up in the same room they **perceive each other as `@Name`**, which is exactly what
+the relationship, attachment, empathy, and grief faculties already speak — so
+everything social is emergent:
+
+- they **meet** — a first co-presence becomes a warm handshake;
+- they **talk** — each one's inner thought is voiced to whoever's present,
+  carrying how they feel, so the listener **catches it** (empathy);
+- they **bond** — repeated warm company deepens attachment;
+- they **seek company** when lonely, and **miss** each other once apart.
+
+Each housemate saves to its own `memory/<name>.json`, so **they remember each
+other across runs**. With `SENTIANCE_COGNITION_BACKEND=ollama` (Windows cmd:
+`set SENTIANCE_COGNITION_BACKEND=ollama` first) their lines come from the local
+model — you can read the actual conversation. A few moments in:
+
+```
+  [Iris @ hallway] @Milo and I meet — we share a warm handshake
+      [joy v+1.00]  ·  with @Milo (acquainted, affection +0.40)
+      Iris: I'd love to know what Milo's been dreaming about.
+  [Milo @ hallway] @Iris, beaming, says: I'd love to know what Milo's been dreaming about.
+      [contentment v+0.61]  ·  with @Iris (acquainted); catches @Iris's feeling
+      Milo: Her warmth eases the knot in my chest a little.
+```
+
+Note the temperaments diverge even here: sunny Iris feels the meeting at `+1.00`,
+anxious Milo far more faintly. Delete `memory/iris.json` etc. for a fresh start.
 
 ### The HTTP runtime
 
@@ -367,8 +404,9 @@ sentiance/
   app.py       # FastAPI runtime
   chat.py      # interactive REPL (streaming, persistent)
   live.py      # let the mind live in the world
-  __main__.py  # serve / demo / chat / live
-tests/         # 135 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
+  society.py   # several minds share the house, meet, talk, and bond
+  __main__.py  # serve / demo / chat / live / society
+tests/         # 143 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat + society
 docs/adr/      # decision records
 ```
 
