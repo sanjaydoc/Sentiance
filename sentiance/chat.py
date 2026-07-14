@@ -221,11 +221,14 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
             continue
         if command == "sleep":
             added = mind.sleep()
+            if mind.last_dream is not None:
+                d = mind.last_dream
+                print(f"  …{name} dreams: \"{d.narrative}\" [{d.emotion.value} {d.tone:+.2f}]")
             if added:
-                print(f"  …{name} sleeps and reflects. New beliefs:")
+                print(f"  …{name} reflects. New beliefs:")
                 for belief in added:
                     print(f"    • {belief}")
-            else:
+            elif mind.last_dream is None:
                 print(f"  …{name} sleeps, but nothing new crystallizes yet.")
             continue
         if command == "people":

@@ -43,6 +43,7 @@ from sentiance.mind.state import (
     ContentSource,
     Drive,
     Emotion,
+    Goal,
     IntrospectiveReport,
     Percept,
     SelfModelState,
@@ -114,6 +115,7 @@ class Mind:
         self.longing: tuple[str, float] | None = None  # who she misses, for the UI
         self.last_empathy: tuple[str, float] | None = None  # whose feeling she caught
         self.grieving: bool = False  # mourning a loss, for the UI
+        self.last_dream: object | None = None  # the last dream she had, for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -165,11 +167,46 @@ class Mind:
 
     def sleep(self) -> list[str]:
         """Reflect and consolidate: distil recurring experience into durable
-        beliefs and rest (the acute feeling calms toward the background mood).
-        Returns the newly-formed beliefs."""
+        beliefs, *dream* (recombine memory into something new), and rest (the acute
+        feeling calms toward the background mood). Returns the newly-formed beliefs."""
         from sentiance.mind.consolidation import consolidate  # noqa: PLC0415 - cycle
+        from sentiance.mind.dreaming import dream  # noqa: PLC0415 - avoid import cycle
 
         added = self.self_model.add_beliefs(consolidate(self.memory))
+
+        # Dream: weave charged memory fragments into something that never happened.
+        # She wakes remembering it — the recombination forges new associations, and
+        # a vivid dream leaves a fresh intention to make sense of it.
+        self.last_dream = dream(self.memory, self.tick_no)
+        if self.last_dream is not None:
+            d = self.last_dream
+            self.tick_no += 1
+            dream_moment = ConsciousMoment(
+                tick=self.tick_no,
+                content=d.narrative,
+                source=ContentSource.THOUGHT,
+                salience=0.5,
+                affect=AffectState(
+                    valence=d.tone,
+                    arousal=0.3,
+                    emotion=d.emotion,
+                    mood_valence=self.affect.mood_valence,
+                    mood_arousal=self.affect.mood_arousal,
+                ),
+                attention_target=d.narrative,
+            )
+            self.memory.store(dream_moment, ["dream"])  # remembered + newly associated
+            if abs(d.tone) >= 0.4 and d.fragments:
+                self.goals.goals.append(
+                    Goal(
+                        description=f"make sense of my dream of {d.fragments[0]}",
+                        drive=Drive.CURIOSITY,
+                        created_tick=self.tick_no,
+                        updated_tick=self.tick_no,
+                        urgency=0.5,
+                    )
+                )
+
         self.needs.rest_now()  # a night's rest
         mv = self.affect.mood_valence
         self.affect = AffectState(
