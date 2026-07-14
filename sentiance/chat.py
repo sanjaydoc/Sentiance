@@ -146,6 +146,9 @@ def _announce_self_judgment(mind: Mind) -> None:
         print(f"      (she is grieving {who})")
     if mind.last_effort:
         print(f"      (she holds her focus by will — effort now {mind.volition.effort:.2f})")
+    if mind.last_anticipation is not None:
+        what, emo = mind.last_anticipation
+        print(f"      ({emo.value} of what's coming: {what})")
 
 
 def _reflect(mind: Mind) -> None:

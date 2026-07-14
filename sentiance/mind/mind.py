@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from sentiance.core.config import Settings, get_settings
 from sentiance.mind.affect import AffectSystem
+from sentiance.mind.anticipation import Anticipation
 from sentiance.mind.attention import AttentionSystem
 from sentiance.mind.cognition import Cognition, build_cognition
 from sentiance.mind.conscience import Conscience, SelfJudgment
@@ -101,6 +102,7 @@ class Mind:
         self.empathy = Empathy()
         self.grief = Grief()
         self.volition = Volition()
+        self.anticipation = Anticipation()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -119,6 +121,7 @@ class Mind:
         self.grieving: bool = False  # mourning a loss, for the UI
         self.last_dream: object | None = None  # the last dream she had, for the UI
         self.last_effort: bool = False  # she held focus by will this tick, for the UI
+        self.last_anticipation: tuple[str, Emotion] | None = None  # what she awaits, for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -359,6 +362,30 @@ class Mind:
                     "emotion": Emotion.GRIEF if grief_pull < -0.3 else self.affect.emotion,
                 }
             )
+
+        # 3g. Felt time: note anything foretold, let hope/dread about what's coming
+        #     colour the present (swelling as it nears), and let arrivals land.
+        if not percept.internal:
+            self.anticipation.note(percept.content, percept.tags, self.tick_no)
+        for arrived in self.anticipation.due(self.tick_no):
+            self.affect = self.affect.model_copy(  # the awaited thing is here now
+                update={"valence": clamp(0.5 * self.affect.valence + 0.5 * arrived.valence,
+                                         -1.0, 1.0)}
+            )
+        self.last_anticipation = None
+        ahead = self.anticipation.feeling(self.tick_no)
+        if ahead is not None:
+            dv, da, emo = ahead
+            self.affect = self.affect.model_copy(
+                update={
+                    "valence": clamp(self.affect.valence + dv, -1.0, 1.0),
+                    "arousal": clamp(self.affect.arousal + da),
+                    "emotion": emo if abs(dv) >= 0.12 else self.affect.emotion,
+                }
+            )
+            looming = self.anticipation.looming(self.tick_no)
+            if looming is not None:
+                self.last_anticipation = (looming.description, emo)
         self.needs.step(
             novelty=percept.novelty,
             arousal=self.affect.arousal,

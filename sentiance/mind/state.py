@@ -41,6 +41,9 @@ class Emotion(StrEnum):
     # standards (the intentions she set, the beliefs she holds).
     PRIDE = "pride"
     DISAPPOINTMENT = "disappointment"
+    # Future-directed feelings: about what is coming, not what is here.
+    HOPE = "hope"
+    DREAD = "dread"
     NEUTRAL = "neutral"
 
 

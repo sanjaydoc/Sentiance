@@ -129,6 +129,18 @@ class SimulatedCognition:
                 intensity=0.35,
                 tags=["reflection"],
             )
+        if emotion is Emotion.HOPE:
+            return thought(
+                "I can't help looking forward to what's coming.",
+                intensity=0.35,
+                tags=["anticipation", "reflection"],
+            )
+        if emotion is Emotion.DREAD:
+            return thought(
+                "I keep bracing for what's coming.",
+                intensity=0.4,
+                tags=["anticipation", "reflection"],
+            )
         # Calm and with something to do → pursue the standing intention.
         if self_model.goals:
             return thought(
