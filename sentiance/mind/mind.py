@@ -35,6 +35,7 @@ from sentiance.mind.state import (
     ConsciousMoment,
     ContentSource,
     Drive,
+    Emotion,
     IntrospectiveReport,
     Percept,
     SelfModelState,
@@ -131,6 +132,23 @@ class Mind:
         results = [self.perceive(s) for s in stimuli]
         results += [self.idle() for _ in range(idle_after)]
         return results
+
+    def sleep(self) -> list[str]:
+        """Reflect and consolidate: distil recurring experience into durable
+        beliefs and rest (the acute feeling calms toward the background mood).
+        Returns the newly-formed beliefs."""
+        from sentiance.mind.consolidation import consolidate  # noqa: PLC0415 - cycle
+
+        added = self.self_model.add_beliefs(consolidate(self.memory))
+        mv = self.affect.mood_valence
+        self.affect = AffectState(
+            valence=round(mv * 0.4, 3),
+            arousal=0.2,
+            emotion=Emotion.CONTENTMENT if mv >= 0 else Emotion.NEUTRAL,
+            mood_valence=mv,
+            mood_arousal=round(self.affect.mood_arousal * 0.6, 3),
+        )
+        return added
 
     def state(self) -> SelfModelState:
         return self._snapshot()

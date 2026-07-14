@@ -20,13 +20,30 @@ from sentiance.mind.state import (
 
 
 class SelfModel:
-    def __init__(self, name: str, narrative_span: int = 6) -> None:
+    def __init__(self, name: str, narrative_span: int = 6, belief_span: int = 12) -> None:
         self.name = name
         self.tick = 0
         self.current_focus = "(nothing yet)"
         self.affect = AffectState()
         self.drives: dict[Drive, float] = {}
         self._history: deque[str] = deque(maxlen=narrative_span)
+        # Durable lessons distilled from experience during consolidation ("sleep").
+        self._beliefs: deque[str] = deque(maxlen=belief_span)
+
+    def add_beliefs(self, beliefs: list[str]) -> list[str]:
+        """Add new beliefs (dedup against those already held). Returns the added."""
+        added: list[str] = []
+        existing = set(self._beliefs)
+        for belief in beliefs:
+            if belief not in existing:
+                self._beliefs.append(belief)
+                existing.add(belief)
+                added.append(belief)
+        return added
+
+    @property
+    def beliefs(self) -> list[str]:
+        return list(self._beliefs)
 
     def update(self, moment: ConsciousMoment, drives: dict[Drive, float]) -> None:
         self.tick = moment.tick
@@ -44,6 +61,7 @@ class SelfModel:
             "tick": self.tick,
             "current_focus": self.current_focus,
             "history": list(self._history),
+            "beliefs": list(self._beliefs),
             "affect": self.affect.model_dump(),
         }
 
@@ -51,6 +69,7 @@ class SelfModel:
         self.tick = int(data.get("tick", 0))
         self.current_focus = data.get("current_focus", self.current_focus)
         self._history = deque(data.get("history", []), maxlen=self._history.maxlen)
+        self._beliefs = deque(data.get("beliefs", []), maxlen=self._beliefs.maxlen)
         if "affect" in data:
             self.affect = AffectState(**data["affect"])
 
@@ -62,4 +81,5 @@ class SelfModel:
             affect=self.affect,
             drives=dict(self.drives),
             narrative=self.narrative,
+            beliefs=self.beliefs,
         )

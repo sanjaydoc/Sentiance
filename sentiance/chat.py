@@ -43,6 +43,8 @@ def parse_line(line: str) -> Parsed:
         return ("self", None)
     if text == ":save":
         return ("save", None)
+    if text == ":sleep":
+        return ("sleep", None)
     if text.startswith(":idle"):
         rest = text[len(":idle"):].strip()
         n = int(rest) if rest.isdigit() else 3
@@ -59,6 +61,7 @@ _HELP = (
     "  <empty>       let the mind wander one tick\n"
     "  :idle N       let it wander N ticks\n"
     "  :self         its current model of itself\n"
+    "  :sleep        reflect: distil recent experience into durable beliefs\n"
     "  :save         write its memory to disk now\n"
     "  :help         this help\n"
     "  :quit         leave (saves automatically)"
@@ -91,6 +94,8 @@ def _print_self(mind: Mind) -> None:
     print("  drives:    {" + drives + "}")
     if s.goals:
         print("  goals:     " + "; ".join(s.goals))
+    if s.beliefs:
+        print("  beliefs:   " + "; ".join(s.beliefs))
     print(f"  narrative: {s.narrative}")
 
 
@@ -173,6 +178,15 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
                 print(f"  …saved to {path}")
             else:
                 print("  (no persistence path set)")
+            continue
+        if command == "sleep":
+            added = mind.sleep()
+            if added:
+                print(f"  …{name} sleeps and reflects. New beliefs:")
+                for belief in added:
+                    print(f"    • {belief}")
+            else:
+                print(f"  …{name} sleeps, but nothing new crystallizes yet.")
             continue
         if command == "self":
             _print_self(mind)
