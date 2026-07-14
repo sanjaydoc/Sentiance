@@ -21,6 +21,7 @@ from sentiance.core.config import Settings, get_settings
 from sentiance.mind.affect import AffectSystem
 from sentiance.mind.attention import AttentionSystem
 from sentiance.mind.cognition import Cognition, build_cognition
+from sentiance.mind.conscience import Conscience, SelfJudgment
 from sentiance.mind.curiosity import Curiosity
 from sentiance.mind.drives import Drives
 from sentiance.mind.embeddings import build_embedder
@@ -89,6 +90,7 @@ class Mind:
         )
         self.needs = Needs()
         self.curiosity = Curiosity()
+        self.conscience = Conscience()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -100,6 +102,7 @@ class Mind:
         self._last_moment: ConsciousMoment | None = None
         self.last_goal_events: list[tuple[str, object]] = []  # for the UI to announce
         self.last_curiosity: tuple[str, float] | None = None  # an "aha", for the UI
+        self.last_self_judgment: SelfJudgment | None = None  # pride/disappointment
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -274,6 +277,22 @@ class Mind:
         self.last_goal_events = self.goals.update(
             moment, self._appraisal, self._dominant_drive, self.affect, self.drives.levels
         )
+
+        # 6b. Self-conscious feeling: measure her conduct against her own
+        #     standards. Following through breeds pride; letting go, disappointment.
+        #     This reflective appraisal colours the feeling she carries onward.
+        self.last_self_judgment = self.conscience.judge(self.last_goal_events)
+        if self.last_self_judgment is not None:
+            j = self.last_self_judgment
+            self.affect = self.affect.model_copy(
+                update={
+                    "valence": clamp(0.5 * self.affect.valence + 0.5 * j.valence, -1.0, 1.0),
+                    "arousal": clamp(self.affect.arousal + 0.1),
+                    "emotion": j.emotion,
+                }
+            )
+            self.self_model.affect = self.affect  # keep introspection consistent
+
         self._last_moment = moment
 
         # 7. Deliberate: form the next inner thought (self-sustaining stream).

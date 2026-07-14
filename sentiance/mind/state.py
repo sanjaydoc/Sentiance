@@ -36,6 +36,10 @@ class Emotion(StrEnum):
     ANGER = "anger"
     SADNESS = "sadness"
     CONFUSION = "confusion"
+    # Self-conscious emotions: felt by measuring her conduct against her own
+    # standards (the intentions she set, the beliefs she holds).
+    PRIDE = "pride"
+    DISAPPOINTMENT = "disappointment"
     NEUTRAL = "neutral"
 
 

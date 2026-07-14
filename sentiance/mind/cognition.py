@@ -99,6 +99,18 @@ class SimulatedCognition:
                 intensity=0.3,
                 tags=["rumination", "reflection"],
             )
+        if emotion is Emotion.PRIDE:
+            return thought(
+                "I'm glad I followed through on what I meant to do.",
+                intensity=0.35,
+                tags=["self", "reflection"],
+            )
+        if emotion is Emotion.DISAPPOINTMENT:
+            return thought(
+                "I wish I'd stayed with what I set out to do.",
+                intensity=0.35,
+                tags=["self", "reflection"],
+            )
         if emotion is Emotion.CONFUSION:
             return thought(
                 f"I'm trying to make sense of \"{focus}\".",

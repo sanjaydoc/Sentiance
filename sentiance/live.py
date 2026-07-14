@@ -8,7 +8,12 @@ the outcome back. Run with ``python -m sentiance live``.
 
 from __future__ import annotations
 
-from sentiance.chat import _announce_curiosity, _announce_goals, format_tick
+from sentiance.chat import (
+    _announce_curiosity,
+    _announce_goals,
+    _announce_self_judgment,
+    format_tick,
+)
 from sentiance.mind import Mind
 from sentiance.mind.state import Stimulus
 from sentiance.world import World, default_home
@@ -67,6 +72,7 @@ def run_live(mind: Mind | None = None, world: World | None = None, steps: int = 
         print(format_tick(mind.perceive(world.sense(), deliberate=False)))
         _announce_goals(mind)
         _announce_curiosity(mind)
+        _announce_self_judgment(mind)
 
         # 2. Reflect — one thought (streamed live if the backend can).
         printer = _Printer()
