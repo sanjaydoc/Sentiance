@@ -40,6 +40,9 @@ pip install -e ".[dev]"
 # Watch a mind's stream of consciousness through a short experience:
 python -m sentiance demo
 
+# Talk to it — type experiences and watch it feel, remember, and think:
+python -m sentiance chat
+
 # Or serve one living mind (docs at http://localhost:8000/docs):
 python -m sentiance
 ```
@@ -62,6 +65,26 @@ t4 [surprise] · a memory: a friendly voice says hello
 
 Fear lowers metacognitive **confidence** (an uncontrollable threat); afterward
 the mind spontaneously **recalls** the friendly voice and re-regulates.
+
+### Talk to it (`chat`)
+
+```bash
+python -m sentiance chat
+```
+
+Type experiences and watch the mind perceive, feel, remember, and — after each
+one — reflect for a couple of ticks. Append `#tags` to hint appraisal
+(`#threat`, `#friend`, `#reward`, …); `:idle N` to let it wander, `:self` to see
+its self-model, `:quit` to leave. With `SENTIANCE_COGNITION_BACKEND=ollama` the
+reflections come from your local model (e.g. `qwen2.5:7b`).
+
+```
+you> a friend calls my name across the room #friend #voice
+  t1  [joy        ] v+0.62 a0.58  ·  a friend calls my name across the room
+      ↳ I am aware that I am attending to something from outside me … it speaks
+        to my wish to feel connected.
+  t2  [contentment] ·  I'd like to stay near this warmth a little longer.
+```
 
 ### The HTTP runtime
 
@@ -109,8 +132,9 @@ sentiance/
     workspace.py     # global broadcast
     mind.py          # the cycle
   app.py       # FastAPI runtime
-  __main__.py  # serve / demo
-tests/         # faculties + full-cycle + HTTP + LLM/Ollama cognition (29 tests)
+  chat.py      # interactive REPL
+  __main__.py  # serve / demo / chat
+tests/         # faculties + full-cycle + HTTP + LLM/Ollama + chat (32 tests)
 docs/adr/      # decision records
 ```
 

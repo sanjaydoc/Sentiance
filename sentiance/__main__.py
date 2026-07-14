@@ -1,8 +1,10 @@
-"""``python -m sentiance`` — serve a mind, or watch its stream of consciousness.
+"""``python -m sentiance`` — serve a mind, watch it, or talk to it.
 
 - ``python -m sentiance``        → serve the mind on :8000 (docs at /docs)
 - ``python -m sentiance demo``   → feed a short scripted experience and print the
                                     conscious moments + first-person reports
+- ``python -m sentiance chat``   → interactive REPL: type experiences and watch
+                                    the mind perceive, feel, remember, and think
 """
 
 from __future__ import annotations
@@ -48,8 +50,14 @@ def run_demo() -> None:
 
 
 def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] == "demo":
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "demo":
         run_demo()
+        return
+    if command == "chat":
+        from sentiance.chat import run_chat
+
+        run_chat()
         return
 
     import uvicorn

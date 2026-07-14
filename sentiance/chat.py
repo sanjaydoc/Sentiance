@@ -1,0 +1,113 @@
+"""An interactive REPL for talking to a single mind.
+
+You type experiences; the mind perceives them, feels, remembers, and thinks out
+loud (via whichever ``Cognition`` backend is configured — the local Ollama voice
+when ``SENTIANCE_COGNITION_BACKEND=ollama``). After each experience the mind
+takes a couple of idle ticks so you can watch it reflect.
+
+Line grammar:
+- plain text            → an experience; append ``#tag`` tokens to hint appraisal
+                          (e.g. ``a loud crash #threat``, ``a friend waves #friend``)
+- empty line           → let the mind wander one tick
+- ``:idle N``          → let it wander N ticks
+- ``:self``            → print its model of itself
+- ``:help``            → show commands
+- ``:quit`` / Ctrl-C   → leave
+"""
+
+from __future__ import annotations
+
+import re
+
+from sentiance.mind import Mind, TickResult
+from sentiance.mind.state import Stimulus
+
+_TAG_RE = re.compile(r"#(\w+)")
+_REFLECT_TICKS = 2  # idle ticks taken after each experience so the mind thinks
+
+Parsed = tuple[str, object]
+
+
+def parse_line(line: str) -> Parsed:
+    """Turn a REPL line into a ``(command, arg)`` pair. Pure and testable."""
+    text = line.strip()
+    if not text:
+        return ("idle", 1)
+    if text in (":q", ":quit", ":exit"):
+        return ("quit", None)
+    if text in (":help", ":h", "?"):
+        return ("help", None)
+    if text == ":self":
+        return ("self", None)
+    if text.startswith(":idle"):
+        rest = text[len(":idle"):].strip()
+        n = int(rest) if rest.isdigit() else 3
+        return ("idle", max(1, n))
+
+    tags = _TAG_RE.findall(text)
+    content = _TAG_RE.sub("", text)
+    content = re.sub(r"\s+", " ", content).strip()
+    return ("perceive", Stimulus(content=content, intensity=0.6, tags=tags))
+
+
+_HELP = (
+    "  <text>        an experience (add #tags: #threat #friend #reward ...)\n"
+    "  <empty>       let the mind wander one tick\n"
+    "  :idle N       let it wander N ticks\n"
+    "  :self         its current model of itself\n"
+    "  :help         this help\n"
+    "  :quit         leave"
+)
+
+
+def format_tick(result: TickResult) -> str:
+    m, rep = result.moment, result.report
+    head = (
+        f"  t{m.tick:<3} [{m.affect.emotion.value:<11}] "
+        f"v{m.affect.valence:+.2f} a{m.affect.arousal:.2f}  ·  {m.content}"
+    )
+    return f"{head}\n      ↳ {rep.text}  (confidence {rep.confidence:.2f})"
+
+
+def _print_self(mind: Mind) -> None:
+    s = mind.state()
+    drives = ", ".join(f"{d.value}:{v:.2f}" for d, v in s.drives.items())
+    print(f"  focus:     {s.current_focus}")
+    print(f"  mood:      valence {s.affect.mood_valence:+.2f}, arousal {s.affect.mood_arousal:.2f}")
+    print("  drives:    {" + drives + "}")
+    print(f"  narrative: {s.narrative}")
+
+
+def run_chat(mind: Mind | None = None) -> None:
+    mind = mind or Mind()
+    backend = mind.settings.cognition_backend
+    print(f"— {mind.settings.agent_name} is awake (cognition: {backend}) —")
+    print("Type an experience, or :help. Ctrl-C to leave.\n")
+
+    while True:
+        try:
+            line = input("you> ")
+        except (EOFError, KeyboardInterrupt):
+            print(f"\n— {mind.settings.agent_name} rests —")
+            return
+
+        command, arg = parse_line(line)
+        if command == "quit":
+            print(f"— {mind.settings.agent_name} rests —")
+            return
+        if command == "help":
+            print(_HELP)
+            continue
+        if command == "self":
+            _print_self(mind)
+            continue
+        if command == "idle":
+            for _ in range(int(arg)):  # type: ignore[arg-type]
+                print(format_tick(mind.idle()))
+            continue
+
+        # An experience: perceive it, then let the mind reflect a couple of ticks.
+        assert isinstance(arg, Stimulus)
+        print(format_tick(mind.perceive(arg)))
+        for _ in range(_REFLECT_TICKS):
+            print(format_tick(mind.idle()))
