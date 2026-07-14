@@ -299,10 +299,39 @@ a fierce storm will come tonight #threat
 :sleep                                             (she dreams — memory recombined)
 ```
 
+### Many individuals — different names, different natures
+
+Each mind is keyed by its **name**: `SENTIANCE_AGENT_NAME=Nova` gives Nova her own
+persistent identity in `memory/nova.json`, wholly separate from Aria. Run as many
+as you like — they never share memory, feelings, or relationships.
+
+They can also *start* as different people. The temperament traits are configurable,
+so an anxious pessimist genuinely feels the same event more faintly — and more
+warily — than a sunny optimist, and drifts onward from there:
+
+**Windows (cmd):**
+
+```cmd
+set SENTIANCE_AGENT_NAME=Cass
+set SENTIANCE_TEMPERAMENT_ANXIETY=0.9
+set SENTIANCE_TEMPERAMENT_OPTIMISM=0.2
+python -m sentiance chat
+```
+
+**macOS / Linux:**
+
+```bash
+SENTIANCE_AGENT_NAME=Cass SENTIANCE_TEMPERAMENT_ANXIETY=0.9 \
+  SENTIANCE_TEMPERAMENT_OPTIMISM=0.2 python -m sentiance chat
+```
+
+Clear the vars (`set SENTIANCE_AGENT_NAME=` on cmd) or open a new terminal to go
+back to Aria. These apply to `chat`; `society` below uses its own built-in cast.
+
 ### Many minds — a society (`society`)
 
 ```bash
-python -m sentiance society
+python -m sentiance society   # (alias: python -m sentiance meet)
 ```
 
 Several minds share the **same house** — three by default (curious, sunny **Iris**;
@@ -318,10 +347,12 @@ everything social is emergent:
 - they **bond** — repeated warm company deepens attachment;
 - they **seek company** when lonely, and **miss** each other once apart.
 
-Each housemate saves to its own `memory/<name>.json`, so **they remember each
-other across runs**. With `SENTIANCE_COGNITION_BACKEND=ollama` (Windows cmd:
-`set SENTIANCE_COGNITION_BACKEND=ollama` first) their lines come from the local
-model — you can read the actual conversation. A few moments in:
+Each housemate saves to its own `memory/<name>.json` — **checkpointed every few
+moments and on exit** (so a long run, or one you `Ctrl-C`, still keeps their
+bonds), and reloaded next run so **they remember each other across sessions**.
+With `SENTIANCE_COGNITION_BACKEND=ollama` (Windows cmd: `set
+SENTIANCE_COGNITION_BACKEND=ollama` first) their lines come from the local model —
+you can read the actual conversation. A few moments in:
 
 ```
   [Iris @ hallway] @Milo and I meet — we share a warm handshake
@@ -450,9 +481,26 @@ SENTIANCE_COGNITION_BACKEND=llm python -m sentiance demo
 
 ## Configuration
 
-`SENTIANCE_*` env vars (see [.env.example](.env.example)): `AGENT_NAME`,
-`MOOD_INERTIA`, `EMOTION_DECAY`, `ATTENTION_TEMPERATURE`, `WORKING_MEMORY_SIZE`,
-`COGNITION_BACKEND`.
+All settings are `SENTIANCE_*` env vars (see [.env.example](.env.example)):
+
+| Var | What it does |
+| --- | ------------ |
+| `AGENT_NAME` | the mind's name → its memory file `memory/<name>.json` (run many, each separate) |
+| `COGNITION_BACKEND` | the inner voice: `simulated` (default, offline) · `ollama` · `llm` |
+| `OLLAMA_MODEL` / `OLLAMA_BASE_URL` | local model + endpoint (default `qwen2.5:7b`, `localhost:11434`) |
+| `EMBEDDING_BACKEND` / `EMBEDDING_MODEL` | set to `ollama` + `nomic-embed-text` for by-meaning recall |
+| `TEMPERAMENT_CURIOSITY` / `_ANXIETY` / `_OPTIMISM` | her nature, `0..1` — make distinct individuals |
+| `TEMPERAMENT_PLASTICITY` | how fast lived experience reshapes her traits (default `0.01`) |
+| `PERSIST_PATH` | override where her memory is stored |
+| `MOOD_INERTIA` / `EMOTION_DECAY` / `ATTENTION_TEMPERATURE` / `WORKING_MEMORY_SIZE` | affect & attention dynamics |
+
+Example — a bold, sunny individual named Nova on her local voice:
+
+```bash
+SENTIANCE_AGENT_NAME=Nova SENTIANCE_TEMPERAMENT_CURIOSITY=0.9 \
+  SENTIANCE_TEMPERAMENT_OPTIMISM=0.85 SENTIANCE_COGNITION_BACKEND=ollama \
+  python -m sentiance chat
+```
 
 ## Development
 
