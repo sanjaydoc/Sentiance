@@ -31,21 +31,77 @@ Each faculty implements a role from a theory of mind:
 | Predictive processing (Friston/Clark) | world-model surprise |
 | Higher-order theories (Rosenthal/Lau) | metacognitive self-report |
 
+## Faculties of mind
+
+On top of the perception → affect → attention → memory → metacognition core, she has:
+
+| # | Faculty | What it gives her |
+| - | ------- | ----------------- |
+| 1 | **Goals & intentions** | forms an intention (from a thought or a drive), holds it across ticks, pursues it, resolves or abandons it — **agency**, not just reaction |
+| 2 | **A small world** (`live`) | rooms, objects, ambient events, a day/night clock she senses and **acts in** — grounded experience, not just typed text |
+| 3 | **Associative memory** | optional embedding recall so "a loud bang" surfaces "the crash" — memory by **meaning**, not shared words |
+| 4 | **Reflection / sleep** (`:sleep`) | distils recurring experience into durable **beliefs** ("loud sounds tend to frighten me") and rests — she grows wiser |
+| 5 | **Relationships** (`@Name`, `:people`) | persistent per-person models — affection & trust built over encounters that **color how she sees them** |
+| 6 | **Temperament & needs** | stable traits (curiosity/anxiety/optimism) make her an **individual**; homeostatic needs (rest/stimulation/connection) create boredom & loneliness when unmet |
+| — | **Emotional carryover** | feelings persist through her own reflection, then ease — believable emotional arcs |
+| — | **Persistent identity** | all of the above saves to disk and reloads, so she is **continuous across runs** |
+
 ## Quickstart
 
+### Install (choose your OS)
+
+**macOS / Linux (bash/zsh):**
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
+git clone https://github.com/sanjaydoc/Sentiance.git
+cd Sentiance
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-
-# Watch a mind's stream of consciousness through a short experience:
-python -m sentiance demo
-
-# Talk to it — type experiences and watch it feel, remember, and think:
-python -m sentiance chat
-
-# Or serve one living mind (docs at http://localhost:8000/docs):
-python -m sentiance
 ```
+
+**Windows (cmd):**
+
+```cmd
+git clone https://github.com/sanjaydoc/Sentiance.git
+cd Sentiance
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -e ".[dev]"
+```
+
+**Windows (PowerShell):** same, but activate with `.venv\Scripts\Activate.ps1`.
+
+### Run
+
+The commands below are identical on every OS once the venv is active:
+
+```bash
+python -m sentiance demo    # watch a scripted stream of consciousness
+python -m sentiance chat    # talk to her: type experiences, she feels/remembers/thinks
+python -m sentiance live    # let her live in a small world she senses and acts in
+python -m sentiance         # serve one mind (HTTP; docs at http://localhost:8000/docs)
+```
+
+### Give her a local LLM voice (optional, recommended)
+
+With [Ollama](https://ollama.com) installed, her thoughts come from a local model
+and stream in live. Set the backend, then run any command above:
+
+| OS | Set the backend |
+| -- | --------------- |
+| macOS / Linux | `export SENTIANCE_COGNITION_BACKEND=ollama` |
+| Windows (cmd) | `set SENTIANCE_COGNITION_BACKEND=ollama` |
+| Windows (PowerShell) | `$env:SENTIANCE_COGNITION_BACKEND="ollama"` |
+
+```bash
+ollama pull qwen2.5:7b          # once
+ollama serve                    # in another terminal
+python -m sentiance chat        # her reflections now come from qwen, streamed
+```
+
+Add `ollama pull nomic-embed-text` and set `SENTIANCE_EMBEDDING_BACKEND=ollama`
+for associative (by-meaning) memory. Everything degrades gracefully to an
+offline voice if Ollama isn't running.
 
 ### The demo
 
@@ -74,15 +130,26 @@ python -m sentiance chat
 
 Type experiences and watch the mind perceive, feel, remember, and — after each
 one — reflect for a couple of ticks. With `SENTIANCE_COGNITION_BACKEND=ollama`
-the reflections come from your local model (e.g. `qwen2.5:7b`) and **stream in
-word-by-word** as it thinks. Append `#tags` to hint appraisal (`#threat`,
-`#friend`, `#reward`, …); `:idle N` to let it wander, `:self` to see its
-self-model, `:save` to persist now, `:quit` to leave.
+the reflections come from your local model and **stream in word-by-word**.
 
-Emotions **carry over** — a frightening experience stays with the mind through
-its next few thoughts, then eases. And the mind is **persistent**: chat saves to
-`~/.sentiance/<name>.json` on exit and reloads it next run, so the same
-individual continues across sessions rather than waking blank.
+Chat commands:
+
+| Type | What happens |
+| ---- | ------------ |
+| `a loud crash #threat` | an experience; `#tags` hint appraisal (`#threat #friend #reward`) |
+| `@Sam waves warmly #friend` | name a **person** she'll remember and form a bond with |
+| *(empty line)* | let her wander/think one tick |
+| `:idle N` | wander N ticks |
+| `:self` | her self-model — mood, drives, needs, temperament, goals, beliefs |
+| `:people` | who she knows and how she feels about them |
+| `:sleep` | reflect: distil recent experience into durable beliefs, and rest |
+| `:save` | persist her memory now |
+| `:quit` | leave (saves automatically) |
+
+Emotions **carry over**, she forms **goals**, distils **beliefs** on `:sleep`,
+remembers **people**, and has an individual **temperament** and **needs**. The
+mind is **persistent**: chat saves to `memory/<name>.json` in the project on exit
+and reloads it next run, so the same individual continues across sessions.
 
 ```
 you> a friend calls my name across the room #friend #voice
@@ -178,17 +245,24 @@ sentiance/
     drives.py        # motivations + appraisal
     affect.py        # valence/arousal + discrete emotion + mood
     attention.py     # the consciousness competition
-    memory.py        # working / episodic / semantic
-    self_model.py    # attention schema / narrative identity
+    memory.py        # working / episodic / semantic (+ embedding recall)
+    embeddings.py    # associative memory: recall by meaning
+    self_model.py    # attention schema / narrative / beliefs
     metacognition.py # first-person self-report
-    cognition.py     # Cognition port: Simulated (offline) + LLM (drop-in)
+    cognition.py     # Cognition port: Simulated / LLM (Anthropic) / Ollama
+    goals.py         # intentions: form, hold, pursue, resolve
+    consolidation.py # sleep: distil experience into durable beliefs
+    relationships.py # per-person models (theory-of-mind)
+    temperament.py   # stable traits + homeostatic needs
     workspace.py     # global broadcast
     persistence.py   # durable identity (save/load across runs)
     mind.py          # the cycle
+  world.py     # a small environment to live in
   app.py       # FastAPI runtime
   chat.py      # interactive REPL (streaming, persistent)
-  __main__.py  # serve / demo / chat
-tests/         # faculties + cycle + HTTP + LLM/Ollama + chat + persistence (43 tests)
+  live.py      # let the mind live in the world
+  __main__.py  # serve / demo / chat / live
+tests/         # 71 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
 docs/adr/      # decision records
 ```
 
