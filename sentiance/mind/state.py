@@ -174,6 +174,17 @@ class Goal(BaseModel):
     status: GoalStatus = GoalStatus.ACTIVE
 
 
+class Relationship(BaseModel):
+    """The mind's model of another person, built up over encounters (ToM-lite)."""
+
+    name: str
+    encounters: int = 0
+    affection: float = Field(0.0, ge=-1.0, le=1.0)  # how she feels about them
+    trust: float = Field(0.5, ge=0.0, le=1.0)
+    first_tick: int = 0
+    last_tick: int = 0
+
+
 class SelfModelState(BaseModel):
     """The mind's model of itself — the substrate of self-report (AST)."""
 

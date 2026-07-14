@@ -41,6 +41,8 @@ def parse_line(line: str) -> Parsed:
         return ("help", None)
     if text == ":self":
         return ("self", None)
+    if text == ":people":
+        return ("people", None)
     if text == ":save":
         return ("save", None)
     if text == ":sleep":
@@ -61,6 +63,7 @@ _HELP = (
     "  <empty>       let the mind wander one tick\n"
     "  :idle N       let it wander N ticks\n"
     "  :self         its current model of itself\n"
+    "  :people       who it knows (name people as @Sam in an experience)\n"
     "  :sleep        reflect: distil recent experience into durable beliefs\n"
     "  :save         write its memory to disk now\n"
     "  :help         this help\n"
@@ -187,6 +190,10 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
                     print(f"    • {belief}")
             else:
                 print(f"  …{name} sleeps, but nothing new crystallizes yet.")
+            continue
+        if command == "people":
+            lines = mind.relationships.summary()
+            print("\n".join(f"  {line}" for line in lines) if lines else "  (no one known yet)")
             continue
         if command == "self":
             _print_self(mind)

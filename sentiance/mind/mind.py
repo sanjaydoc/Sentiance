@@ -27,6 +27,7 @@ from sentiance.mind.goals import GoalSystem
 from sentiance.mind.memory import Memory
 from sentiance.mind.metacognition import Metacognition
 from sentiance.mind.perception import Perceptor
+from sentiance.mind.relationships import RelationshipSystem, extract_people
 from sentiance.mind.self_model import SelfModel
 from sentiance.mind.state import (
     AffectState,
@@ -77,6 +78,7 @@ class Mind:
         self.self_model = SelfModel(self.settings.agent_name)
         self.metacognition = Metacognition()
         self.goals = GoalSystem()
+        self.relationships = RelationshipSystem()
         self.cognition = cognition or build_cognition(self.settings)
 
         self.affect = AffectState()
@@ -182,9 +184,20 @@ class Mind:
         percept = self.perceptor.perceive(incoming, self.world)
         self._tags = percept.tags
 
+        # 1b. Known people present color the appraisal before anything happens —
+        # a warm friend feels good on sight; a hurtful person puts her on edge.
+        people = extract_people(percept.content)
+        prior = self.relationships.prior(people)
+        if prior is not None and percept.valence_hint is None:
+            percept = percept.model_copy(update={"valence_hint": round(prior, 3)})
+
         # 2. Appraise against drives, then 3. feel.
         self._appraisal, self._dominant_drive = self.drives.appraise(percept)
         self.affect = self.affect_system.appraise(percept, self._appraisal, self.affect)
+
+        # 3b. Fold how this encounter felt back into each person's model.
+        if people:
+            self.relationships.record(people, self.affect.valence, self.tick_no)
 
         # 4. Attention competition over candidate contents.
         winner, also = self.attention.select(self._candidates(percept), self.affect.arousal)
