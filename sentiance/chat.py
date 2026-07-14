@@ -117,6 +117,12 @@ def _announce_goals(mind: Mind) -> None:
         print(f"      ({labels[event]}: {goal.description})")
 
 
+def _announce_curiosity(mind: Mind) -> None:
+    if mind.last_curiosity is not None:
+        _content, lift = mind.last_curiosity
+        print(f"      (it clicks — I understand this now, +{lift:.2f})")
+
+
 def _reflect(mind: Mind) -> None:
     """One reflection step: the mind thinks (streaming the thought live), then we
     show the feeling and report it evokes."""
@@ -132,6 +138,7 @@ def _reflect(mind: Mind) -> None:
     if thought is None:  # calm/neutral — let the mind wander instead
         print(format_tick(mind.idle(deliberate=False)))
         _announce_goals(mind)
+        _announce_curiosity(mind)
         return
     if not streamed["any"]:  # backend didn't stream (e.g. simulated) — show it now
         print(f"  {thought.content}", end="")
@@ -141,6 +148,7 @@ def _reflect(mind: Mind) -> None:
     a, rep = result.moment.affect, result.report
     print(f"      [{a.emotion.value} v{a.valence:+.2f} a{a.arousal:.2f}]  ↳ {rep.text}")
     _announce_goals(mind)
+    _announce_curiosity(mind)
 
 
 def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
@@ -213,5 +221,6 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
         assert isinstance(arg, Stimulus)
         print(format_tick(mind.perceive(arg, deliberate=False)))
         _announce_goals(mind)
+        _announce_curiosity(mind)
         for _ in range(_REFLECT_TICKS):
             _reflect(mind)

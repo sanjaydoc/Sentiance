@@ -21,6 +21,7 @@ from sentiance.core.config import Settings, get_settings
 from sentiance.mind.affect import AffectSystem
 from sentiance.mind.attention import AttentionSystem
 from sentiance.mind.cognition import Cognition, build_cognition
+from sentiance.mind.curiosity import Curiosity
 from sentiance.mind.drives import Drives
 from sentiance.mind.embeddings import build_embedder
 from sentiance.mind.goals import GoalSystem
@@ -87,6 +88,7 @@ class Mind:
             optimism=self.settings.temperament_optimism,
         )
         self.needs = Needs()
+        self.curiosity = Curiosity()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -97,6 +99,7 @@ class Mind:
         self._pending_inner: Stimulus | None = None
         self._last_moment: ConsciousMoment | None = None
         self.last_goal_events: list[tuple[str, object]] = []  # for the UI to announce
+        self.last_curiosity: tuple[str, float] | None = None  # an "aha", for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -168,7 +171,9 @@ class Mind:
         """Imagine each ``(label, hypothetical)`` option and rank them by how
         appealing the anticipated moment feels — a forward model that mutates
         nothing. The mind can then choose the future it expects to like best."""
-        return self.imagination.imagine(options, self.world, self.affect)
+        return self.imagination.imagine(
+            options, self.world, self.affect, self.curiosity.appeal_bonus(self.drives.levels)
+        )
 
     def state(self) -> SelfModelState:
         return self._snapshot()
@@ -221,6 +226,20 @@ class Mind:
             }
         )
         self.affect = self.affect_system.appraise(percept, self._appraisal, self.affect)
+
+        # 3a. Intrinsic curiosity: if this moment resolves something she'd been
+        #     wondering about (once surprising, now familiar), understanding it
+        #     lifts her feeling and feeds the curiosity drive — the quiet "aha".
+        aha = self.curiosity.observe(percept.content, percept.novelty)
+        self.last_curiosity = None
+        if aha > 0.0:
+            self.affect = self.affect.model_copy(
+                update={"valence": clamp(self.affect.valence + aha, -1.0, 1.0)}
+            )
+            self.drives.levels[Drive.CURIOSITY] = clamp(
+                self.drives.levels[Drive.CURIOSITY] + 0.5 * aha
+            )
+            self.last_curiosity = (percept.content, aha)
 
         # 3b. Fold how this encounter felt into each person's model, and let the
         #     moment deplete/replenish the homeostatic needs.

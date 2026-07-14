@@ -34,6 +34,7 @@ def snapshot(mind: Mind) -> dict:
         "goals": mind.goals.dump(),
         "relationships": mind.relationships.dump(),
         "needs": mind.needs.dump(),
+        "curiosity": mind.curiosity.dump(),
     }
 
 
@@ -48,6 +49,7 @@ def restore(mind: Mind, data: dict) -> None:
     mind.goals.load(data.get("goals", {}))
     mind.relationships.load(data.get("relationships", {}))
     mind.needs.load(data.get("needs", {}))
+    mind.curiosity.load(data.get("curiosity", {}))
 
 
 def save(mind: Mind, path: str | Path) -> None:

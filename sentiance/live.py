@@ -8,31 +8,35 @@ the outcome back. Run with ``python -m sentiance live``.
 
 from __future__ import annotations
 
-from sentiance.chat import _announce_goals, format_tick
+from sentiance.chat import _announce_curiosity, _announce_goals, format_tick
 from sentiance.mind import Mind
 from sentiance.mind.state import Stimulus
 from sentiance.world import World, default_home
 
 
-def _relocate_by_foresight(mind: Mind, world: World) -> tuple[str, float] | None:
-    """When nothing else moves her, imagine each way out and walk toward the most
-    appealing room — foresight, not a blind shuffle. Returns (outcome, valence)."""
+def _place_stim(world: World, room: str) -> Stimulus:
+    return Stimulus(
+        content=f"I am in the {room} — {world.places[room].description}",
+        source="imagined",
+        intensity=0.5,
+        tags=["place", "imagined"],
+    )
+
+
+def _consider_moving(mind: Mind, world: World, margin: float = 0.05) -> tuple[str, float] | None:
+    """Imagine each way out *and* staying put, then move only if some room clearly
+    beats staying. Curiosity makes the unexplored the most appealing future, so
+    she keeps discovering — until everything is familiar and she settles."""
     exits = world.here().exits
     if not exits:
         return None
-    options = [
-        (
-            room,
-            Stimulus(
-                content=f"I am in the {room} — {world.places[room].description}",
-                source="imagined",
-                intensity=0.5,
-                tags=["place", "imagined"],
-            ),
-        )
-        for room in exits
-    ]
-    best = mind.foresee(options)[0]
+    options = [(room, _place_stim(world, room)) for room in exits]
+    options.append(("stay", _place_stim(world, world.current)))
+    ranked = mind.foresee(options)
+    best = ranked[0]
+    stay = next(p for p in ranked if p.option == "stay")
+    if best.option == "stay" or best.appeal - stay.appeal < margin:
+        return None  # nothing out there beckons more than where she is
     outcome = world.move(best.option)  # options are adjacent exits
     return (outcome, best.affect.valence) if outcome else None
 
@@ -62,6 +66,7 @@ def run_live(mind: Mind | None = None, world: World | None = None, steps: int = 
         # 1. Perceive the surroundings.
         print(format_tick(mind.perceive(world.sense(), deliberate=False)))
         _announce_goals(mind)
+        _announce_curiosity(mind)
 
         # 2. Reflect — one thought (streamed live if the backend can).
         printer = _Printer()
@@ -83,10 +88,10 @@ def run_live(mind: Mind | None = None, world: World | None = None, steps: int = 
                 deliberate=False,
             )
 
-        # If her thought didn't move her but she's grown restless (stimulation
-        # low), she imagines the ways out and walks toward the most appealing.
-        if world.current == before and mind.needs.stimulation < 0.5:
-            relocated = _relocate_by_foresight(mind, world)
+        # If her thought didn't move her, foresight still gets a say: curiosity
+        # pulls her toward the room that promises the most to discover.
+        if world.current == before:
+            relocated = _consider_moving(mind, world)
             if relocated:
                 outcome, imagined_v = relocated
                 print(f"      → (foreseeing) {outcome}  [it felt like {imagined_v:+.2f}]")
