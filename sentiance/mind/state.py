@@ -143,6 +143,7 @@ class IntrospectiveReport(BaseModel):
 class MemoryTrace(BaseModel):
     """An episodic memory: a conscious moment laid down with its affective charge."""
 
+    trace_id: str = Field(default_factory=_new_id)
     tick: int
     content: str
     tags: list[str]

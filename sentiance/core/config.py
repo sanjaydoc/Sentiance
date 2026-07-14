@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     ollama_base_url: str = "http://localhost:11434"
 
+    # Associative memory: "none" (lexical recall) or "ollama" (embedding recall).
+    embedding_backend: str = "none"
+    embedding_model: str = "nomic-embed-text"
+
     model_config = SettingsConfigDict(
         env_prefix="SENTIANCE_",
         env_file=".env",

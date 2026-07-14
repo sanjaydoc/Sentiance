@@ -22,6 +22,7 @@ from sentiance.mind.affect import AffectSystem
 from sentiance.mind.attention import AttentionSystem
 from sentiance.mind.cognition import Cognition, build_cognition
 from sentiance.mind.drives import Drives
+from sentiance.mind.embeddings import build_embedder
 from sentiance.mind.goals import GoalSystem
 from sentiance.mind.memory import Memory
 from sentiance.mind.metacognition import Metacognition
@@ -70,6 +71,7 @@ class Mind:
         self.memory = Memory(
             working_size=self.settings.working_memory_size,
             episodic_capacity=self.settings.episodic_capacity,
+            embedder=build_embedder(self.settings),
         )
         self.self_model = SelfModel(self.settings.agent_name)
         self.metacognition = Metacognition()
