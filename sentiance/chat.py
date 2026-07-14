@@ -133,6 +133,9 @@ def _announce_self_judgment(mind: Mind) -> None:
         print(f"      ({j.emotion.value}: {j.reason})")
     if mind.last_anger:
         print("      (frustration boils over — she digs in rather than backing down)")
+    if mind.longing is not None:
+        name, ache = mind.longing
+        print(f"      (she misses @{name} — a longing of {ache:.2f})")
 
 
 def _reflect(mind: Mind) -> None:

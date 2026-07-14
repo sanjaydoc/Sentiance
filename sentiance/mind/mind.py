@@ -107,6 +107,7 @@ class Mind:
         self.last_curiosity: tuple[str, float] | None = None  # an "aha", for the UI
         self.last_self_judgment: SelfJudgment | None = None  # pride/disappointment
         self.last_anger: bool = False  # frustration boiled over this tick, for the UI
+        self.longing: tuple[str, float] | None = None  # who she misses, for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -214,9 +215,13 @@ class Mind:
         percept = self.perceptor.perceive(incoming, self.world)
         self._tags = percept.tags
 
-        # 1b. Known people present color the appraisal before anything happens —
-        # a warm friend feels good on sight; a hurtful person puts her on edge.
+        # 1b. Known people color the appraisal before anything happens — a warm
+        # friend feels good on sight; a hurtful person puts her on edge. Merely
+        # *thinking* of someone still colours the feeling, but only an external
+        # encounter counts as them actually being *present* (§3b) — otherwise she
+        # could never miss anyone, since remembering them would summon them.
         people = extract_people(percept.content)
+        present = [] if percept.internal else people
         prior = self.relationships.prior(people)
         if prior is not None and percept.valence_hint is None:
             percept = percept.model_copy(update={"valence_hint": round(prior, 3)})
@@ -250,12 +255,29 @@ class Mind:
 
         # 3b. Fold how this encounter felt into each person's model, and let the
         #     moment deplete/replenish the homeostatic needs.
-        if people:
-            self.relationships.record(people, self.affect.valence, self.tick_no)
+        if present:
+            self.relationships.record(present, self.affect.valence, self.tick_no)
+
+        # 3b-i. Attachment: a loved one present warms her and fills her need for
+        #       connection; one long absent is *missed* — a longing that aches a
+        #       little and leaves her lonelier the deeper the bond.
+        bond = self.relationships.bond(present)
+        if bond > 0.0:
+            self.affect = self.affect.model_copy(
+                update={"valence": clamp(self.affect.valence + 0.2 * bond, -1.0, 1.0)}
+            )
+            self.needs.connection = clamp(self.needs.connection + 0.15 * bond)
+        self.longing = self.relationships.missing(self.tick_no, set(present))
+        if self.longing is not None:
+            ache = self.longing[1]
+            self.affect = self.affect.model_copy(
+                update={"valence": clamp(self.affect.valence - 0.15 * ache, -1.0, 1.0)}
+            )
+            self.needs.connection = clamp(self.needs.connection - 0.1 * ache)
         self.needs.step(
             novelty=percept.novelty,
             arousal=self.affect.arousal,
-            social=bool(people),
+            social=bool(present),
             valence=self.affect.valence,
         )
         # 3c. And let this lived moment slowly reshape who she is — the running
@@ -362,6 +384,16 @@ class Mind:
             )
         # Associative recall cued by the current percept.
         candidates += self.memory.retrieve(percept.content, percept.tags, k=1)
+        # Missing a loved one can well up on its own — a longing intrudes.
+        if self.longing is not None:
+            name, ache = self.longing
+            candidates.append(
+                Candidate(
+                    content=f"how much I miss @{name}",
+                    source=ContentSource.FEELING,
+                    salience=clamp(0.3 + 0.5 * ache),
+                )
+            )
         # A standing intention can intrude on consciousness ("what was I doing?").
         goal = self.goals.top()
         if goal is not None:

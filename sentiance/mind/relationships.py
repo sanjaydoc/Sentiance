@@ -7,6 +7,12 @@ how each encounter felt. A known person then colors her appraisal *before*
 anything happens: seeing a warm friend feels good on sight; a person who has hurt
 her puts her on edge. This makes her socially continuous, not just
 self-continuous.
+
+Beyond momentary affection, warmth repeated over time builds **attachment** — a
+slow, sticky bond. A person she is attached to lifts her simply by being near, and
+their long **absence is missed**: a longing that grows with the depth of the bond
+and the time apart, draining her need for connection. Attachment is what makes
+affection into something more like love — and what makes loss cost something.
 """
 
 from __future__ import annotations
@@ -46,15 +52,48 @@ class RelationshipSystem:
             rel.encounters += 1
             rel.affection = clamp(0.6 * rel.affection + 0.4 * valence, -1.0, 1.0)
             rel.trust = clamp(rel.trust + 0.08 * valence)
+            # Warmth deepens the bond (slowing as it grows); real hurt erodes it a little.
+            if valence > 0:
+                rel.attachment = clamp(rel.attachment + 0.06 * valence * (1 - 0.5 * rel.attachment))
+            elif valence < -0.3:
+                rel.attachment = clamp(rel.attachment + 0.04 * valence)
             rel.last_tick = tick
+
+    def bond(self, names: list[str]) -> float:
+        """The strongest attachment among the people present (0 if none/strangers)."""
+        vals = [self.people[n].attachment for n in names if n in self.people]
+        return max(vals) if vals else 0.0
+
+    def missing(
+        self, current_tick: int, present: set[str], min_absence: int = 5, full_at: int = 40
+    ) -> tuple[str, float] | None:
+        """Whom she most misses right now: someone she's attached to, absent a
+        while. Returns ``(name, longing)`` — longing scales with the depth of the
+        bond and how long they've been gone — or ``None`` if no one is missed."""
+        best: tuple[str, float] | None = None
+        for rel in self.people.values():
+            if rel.name in present or rel.attachment < 0.2:
+                continue
+            gap = current_tick - rel.last_tick
+            if gap < min_absence:
+                continue
+            longing = clamp(rel.attachment * min(1.0, gap / full_at))
+            if best is None or longing > best[1]:
+                best = (rel.name, round(longing, 3))
+        return best
 
     def summary(self) -> list[str]:
         lines: list[str] = []
         for rel in sorted(self.people.values(), key=lambda r: r.encounters, reverse=True):
             tone = "warm" if rel.affection > 0.2 else "wary" if rel.affection < -0.2 else "neutral"
+            bond = (
+                " — bonded" if rel.attachment >= 0.6
+                else " — close" if rel.attachment >= 0.3
+                else ""
+            )
             lines.append(
-                f"{rel.name}: {tone} (affection {rel.affection:+.2f}, "
-                f"trust {rel.trust:.2f}, met {rel.encounters}x)"
+                f"{rel.name}: {tone}{bond} (affection {rel.affection:+.2f}, "
+                f"trust {rel.trust:.2f}, attachment {rel.attachment:.2f}, met {rel.encounters}x)"
             )
         return lines
 

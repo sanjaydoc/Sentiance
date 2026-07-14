@@ -183,8 +183,11 @@ class Relationship(BaseModel):
 
     name: str
     encounters: int = 0
-    affection: float = Field(0.0, ge=-1.0, le=1.0)  # how she feels about them
+    affection: float = Field(0.0, ge=-1.0, le=1.0)  # how she feels about them *now*
     trust: float = Field(0.5, ge=0.0, le=1.0)
+    # Attachment is the slow, sticky depth of the bond — it grows over many warm
+    # encounters and lingers through absence (you don't stop loving someone fast).
+    attachment: float = Field(0.0, ge=0.0, le=1.0)
     first_tick: int = 0
     last_tick: int = 0
 
