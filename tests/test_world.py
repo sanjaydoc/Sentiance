@@ -48,6 +48,36 @@ def test_act_parses_movement_and_examination_from_a_thought() -> None:
     assert w.act("I wonder about the meaning of it all") is None
 
 
+def test_act_walks_toward_a_non_adjacent_room_one_step_at_a_time() -> None:
+    w = default_home()  # bedroom → hallway → kitchen
+    # She wants the kitchen but it isn't adjacent: she steps toward it.
+    assert w.act("I should go to the kitchen") is not None
+    assert w.current == "hallway"
+    assert w.act("I should go to the kitchen") is not None
+    assert w.current == "kitchen"
+
+
+def test_act_follows_an_implied_destination() -> None:
+    w = default_home()
+    # No room named — only a want. "Make breakfast" implies the kitchen.
+    w.act("time to get up and make some breakfast")
+    assert w.current == "hallway"  # a step toward the kitchen
+    w.act("I'm still hungry, I want to eat")
+    assert w.current == "kitchen"
+    # "Step outside for some fresh air" implies the garden.
+    w.act("I'll head back to the hallway")
+    w.act("I'd love to step outside and feel the air")
+    assert w.current == "garden"
+
+
+def test_drift_moves_toward_the_least_visited_exit() -> None:
+    w = default_home()
+    w.move("hallway")  # now in the hallway; bedroom visited, others not
+    outcome = w.drift()
+    assert outcome is not None
+    assert w.current in {"kitchen", "garden"}  # not back to the visited bedroom
+
+
 def test_run_live_drives_the_mind_through_the_world() -> None:
     mind = Mind(settings=Settings())  # simulated backend — offline
     world = World(places=default_home().places, current="bedroom")

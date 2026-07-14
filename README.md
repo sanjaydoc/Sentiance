@@ -38,7 +38,7 @@ On top of the perception → affect → attention → memory → metacognition c
 | # | Faculty | What it gives her |
 | - | ------- | ----------------- |
 | 1 | **Goals & intentions** | forms an intention (from a thought or a drive), holds it across ticks, pursues it, resolves or abandons it — **agency**, not just reaction |
-| 2 | **A small world** (`live`) | rooms, objects, ambient events, a day/night clock she senses and **acts in** — grounded experience, not just typed text |
+| 2 | **A small world** (`live`) | rooms, objects, ambient events, a day/night clock she senses and **acts in** — her thoughts move her (naming a room, or just wanting what it offers: "make breakfast" → the kitchen), walking there a step at a time, and boredom pulls her to explore |
 | 3 | **Associative memory** | optional embedding recall so "a loud bang" surfaces "the crash" — memory by **meaning**, not shared words |
 | 4 | **Reflection / sleep** (`:sleep`) | distils recurring experience into durable **beliefs** ("loud sounds tend to frighten me") and rests — she grows wiser |
 | 5 | **Relationships** (`@Name`, `:people`) | persistent per-person models — affection & trust built over encounters that **color how she sees them** |
@@ -262,7 +262,7 @@ sentiance/
   chat.py      # interactive REPL (streaming, persistent)
   live.py      # let the mind live in the world
   __main__.py  # serve / demo / chat / live
-tests/         # 71 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
+tests/         # 74 tests: every faculty + full cycle + HTTP + LLM/Ollama + chat
 docs/adr/      # decision records
 ```
 

@@ -50,10 +50,15 @@ def run_live(mind: Mind | None = None, world: World | None = None, steps: int = 
         print()
         mind.perceive(thought, deliberate=False)
 
-        # 3. Act, if the thought expressed one — the world responds.
+        # 3. Act, if the thought expressed one — the world responds. If it didn't
+        #    but she's grown bored (stimulation low), restlessness carries her on.
         outcome = world.act(thought.content)
+        restless = False
+        if outcome is None and mind.needs.stimulation < 0.4:
+            outcome = world.drift()
+            restless = outcome is not None
         if outcome:
-            print(f"      → {outcome}")
+            print(f"      → {'(restless) ' if restless else ''}{outcome}")
             mind.perceive(
                 Stimulus(content=outcome, source="world", intensity=0.5, tags=["action"]),
                 deliberate=False,
