@@ -5,6 +5,8 @@
                                     conscious moments + first-person reports
 - ``python -m sentiance chat``   → interactive REPL: type experiences and watch
                                     the mind perceive, feel, remember, and think
+- ``python -m sentiance live``   → let the mind live in a small world it senses
+                                    and acts in (rooms, objects, day/night)
 """
 
 from __future__ import annotations
@@ -58,6 +60,11 @@ def main() -> None:
         from sentiance.chat import run_chat
 
         run_chat()
+        return
+    if command == "live":
+        from sentiance.live import run_live
+
+        run_live()
         return
 
     import uvicorn
