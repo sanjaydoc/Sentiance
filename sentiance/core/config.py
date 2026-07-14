@@ -26,12 +26,16 @@ class Settings(BaseSettings):
     working_memory_size: int = 7  # Miller's 7±2
     episodic_capacity: int = 500
 
-    # Cognition backend: "simulated" (offline, deterministic) or "llm".
+    # Cognition backend: "simulated" (offline), "llm" (Anthropic), or "ollama" (local).
     cognition_backend: str = "simulated"
-    llm_model: str = "claude-opus-4-8"
     llm_max_tokens: int = 256
+    # "llm" backend (Anthropic).
+    llm_model: str = "claude-opus-4-8"
     # Falls back to the ANTHROPIC_API_KEY the SDK reads from the environment.
     anthropic_api_key: str | None = None
+    # "ollama" backend (local models — no key, nothing leaves the machine).
+    ollama_model: str = "qwen2.5:7b"
+    ollama_base_url: str = "http://localhost:11434"
 
     model_config = SettingsConfigDict(
         env_prefix="SENTIANCE_",

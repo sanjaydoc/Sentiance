@@ -20,10 +20,16 @@ Define a `Cognition` **port** — `deliberate(moment, source, self_model, memory
 - `LLMCognition` — an Anthropic-backed inner monologue. It composes a prompt
   from the self-model + affect + drives + narrative and calls Claude
   (default `claude-opus-4-8`) for the mind's next private thought. The client is
-  built lazily, so the package imports without the `anthropic` package or a key;
-  any failure (no key, network error, refusal) degrades gracefully to a fallback
-  voice so the cognitive cycle never stalls. Selected via
-  `SENTIANCE_COGNITION_BACKEND=llm`.
+  built lazily, so the package imports without the `anthropic` package or a key.
+  Selected via `SENTIANCE_COGNITION_BACKEND=llm`.
+- `OllamaCognition` — the same prompt against a **local** model served by Ollama
+  (e.g. `qwen2.5:7b`), over Ollama's native `/api/chat` using `httpx`. No API key,
+  no data leaves the machine, no extra dependency. Selected via
+  `SENTIANCE_COGNITION_BACKEND=ollama`.
+
+All three share one prompt builder and degrade gracefully: any failure to reach
+the model (no key/server, network error, refusal) falls back to a deterministic
+voice, so the cognitive cycle never stalls.
 
 ## Consequences
 

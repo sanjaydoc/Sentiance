@@ -7,12 +7,14 @@ Behind a stable ``Cognition`` port so the "thinking" engine is swappable
   drives. The default; makes the whole mind runnable and testable with no keys.
 - ``LLMCognition`` — an Anthropic-backed inner monologue. It composes a prompt
   from the self-model, affect, drives, and narrative, asks Claude for the next
-  private thought, and returns it as a self-generated stimulus. If the model is
-  unavailable (no key, network error, refusal) it **degrades gracefully** to a
-  fallback voice, so the cognitive cycle never stalls on an API blip.
+  private thought, and returns it as a self-generated stimulus.
+- ``OllamaCognition`` — the same idea against a **local** model served by Ollama
+  (e.g. ``qwen2.5:7b``): no API key, nothing leaves the machine.
 
-Either way the thought becomes the next tick's stimulus, giving the mind a
-self-sustaining inner stream.
+All backends share one prompt builder and degrade gracefully: if the model is
+unavailable (no key/server, network error, refusal) they fall back to a
+deterministic voice, so the cognitive cycle never stalls. Either way the thought
+becomes the next tick's stimulus, giving the mind a self-sustaining inner stream.
 """
 
 from __future__ import annotations
@@ -106,6 +108,37 @@ _SYSTEM_TEMPLATE = (
 )
 
 
+def _compose_prompt(
+    self_model: SelfModelState, moment_content: str, source: ContentSource
+) -> tuple[str, str]:
+    """Build the (system, user) prompt shared by every LLM cognition backend."""
+    affect = self_model.affect
+    drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
+    system = _SYSTEM_TEMPLATE.format(name=self_model.name)
+    user = (
+        f"Right now I am aware of: {moment_content}\n"
+        f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
+        f"I feel {affect.emotion.value} — valence {affect.valence:+.2f}, "
+        f"arousal {affect.arousal:.2f}.\n"
+        f"My drives: {drives}.\n"
+        f"Recent stream: {self_model.narrative}\n"
+        "My next thought is:"
+    )
+    return system, user
+
+
+def _thought_to_stimulus(text: str, arousal: float) -> Stimulus | None:
+    text = text.strip()
+    if not text:
+        return None
+    return Stimulus(
+        content=text,
+        source="inner",
+        intensity=clamp(0.3 + 0.4 * arousal),
+        tags=["reflection", "inner"],
+    )
+
+
 class LLMCognition:
     """Anthropic-backed inner monologue (drop-in for ``SimulatedCognition``).
 
@@ -143,14 +176,7 @@ class LLMCognition:
         except Exception:  # noqa: BLE001 - the inner loop must survive any API error
             return self.fallback.deliberate(moment_content, source, self_model, memory)
 
-        if not text:
-            return None
-        return Stimulus(
-            content=text,
-            source="inner",
-            intensity=clamp(0.3 + 0.4 * self_model.affect.arousal),
-            tags=["reflection", "inner"],
-        )
+        return _thought_to_stimulus(text, self_model.affect.arousal)
 
     # --- internals --------------------------------------------------------
 
@@ -171,22 +197,12 @@ class LLMCognition:
     def _complete(
         self, client: object, moment_content: str, source: ContentSource, self_model: SelfModelState
     ) -> str:
-        affect = self_model.affect
-        drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
-        user = (
-            f"Right now I am aware of: {moment_content}\n"
-            f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
-            f"I feel {affect.emotion.value} — valence {affect.valence:+.2f}, "
-            f"arousal {affect.arousal:.2f}.\n"
-            f"My drives: {drives}.\n"
-            f"Recent stream: {self_model.narrative}\n"
-            "My next thought is:"
-        )
+        system, user = _compose_prompt(self_model, moment_content, source)
         # NOTE: no temperature/top_p — those are rejected on Opus 4.8.
         response = client.messages.create(  # type: ignore[attr-defined]
             model=self.model,
             max_tokens=self.max_tokens,
-            system=_SYSTEM_TEMPLATE.format(name=self_model.name),
+            system=system,
             messages=[{"role": "user", "content": user}],
         )
         if getattr(response, "stop_reason", None) == "refusal":
@@ -196,12 +212,84 @@ class LLMCognition:
         ).strip()
 
 
+class OllamaCognition:
+    """Local-LLM inner monologue via a running Ollama server (e.g. qwen2.5:7b).
+
+    Talks to Ollama's native ``/api/chat`` endpoint over HTTP with ``httpx`` (a
+    core dependency — no extra install, no API key, nothing leaves the machine).
+    The HTTP client is created lazily; any failure to reach Ollama (server down,
+    model not pulled, timeout) degrades gracefully to ``fallback`` so the
+    cognitive cycle never stalls.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str = "qwen2.5:7b",
+        base_url: str = "http://localhost:11434",
+        max_tokens: int = 256,
+        timeout: float = 120.0,
+        client: object | None = None,
+        fallback: Cognition | None = None,
+    ) -> None:
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.max_tokens = max_tokens
+        self.timeout = timeout
+        self._client = client  # injectable httpx.Client (or a test double)
+        self.fallback: Cognition = fallback or SimulatedCognition()
+
+    def deliberate(
+        self, moment_content: str, source: ContentSource, self_model: SelfModelState, memory: Memory
+    ) -> Stimulus | None:
+        try:
+            text = self._complete(self._ensure_client(), moment_content, source, self_model)
+        except Exception:  # noqa: BLE001 - a local server hiccup must not crash the mind
+            return self.fallback.deliberate(moment_content, source, self_model, memory)
+        return _thought_to_stimulus(text, self_model.affect.arousal)
+
+    # --- internals --------------------------------------------------------
+
+    def _ensure_client(self) -> object:
+        if self._client is None:
+            import httpx  # noqa: PLC0415 - core dependency, imported lazily
+
+            self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout)
+        return self._client
+
+    def _complete(
+        self, client: object, moment_content: str, source: ContentSource, self_model: SelfModelState
+    ) -> str:
+        system, user = _compose_prompt(self_model, moment_content, source)
+        response = client.post(  # type: ignore[attr-defined]
+            "/api/chat",
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "stream": False,
+                "options": {"num_predict": self.max_tokens},
+            },
+        )
+        response.raise_for_status()
+        return (response.json().get("message") or {}).get("content", "")
+
+
 def build_cognition(settings: Settings) -> Cognition:
     """Select the cognition adapter from settings (composition root, ADR-0003)."""
-    if settings.cognition_backend == "llm":
+    backend = settings.cognition_backend
+    if backend == "llm":
         return LLMCognition(
             model=settings.llm_model,
             max_tokens=settings.llm_max_tokens,
             api_key=settings.anthropic_api_key,
+        )
+    if backend == "ollama":
+        return OllamaCognition(
+            model=settings.ollama_model,
+            base_url=settings.ollama_base_url,
+            max_tokens=settings.llm_max_tokens,
         )
     return SimulatedCognition()

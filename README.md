@@ -110,32 +110,47 @@ sentiance/
     mind.py          # the cycle
   app.py       # FastAPI runtime
   __main__.py  # serve / demo
-tests/         # faculties + full-cycle + HTTP + LLM cognition (24 tests)
+tests/         # faculties + full-cycle + HTTP + LLM/Ollama cognition (29 tests)
 docs/adr/      # decision records
 ```
 
 ## The LLM-backed inner voice
 
-`sentiance/mind/cognition.py` defines a `Cognition` protocol. The default
-`SimulatedCognition` is deterministic and offline; `LLMCognition` is a real
-**Anthropic-backed** inner monologue that composes a prompt from the self-model,
-affect, drives, and narrative and asks Claude for the mind's next private thought
-([ADR-0003](docs/adr/0003-cognition-behind-a-port.md)).
+`sentiance/mind/cognition.py` defines a `Cognition` protocol with three adapters,
+selected by config (no code change). Each composes a prompt from the self-model,
+affect, drives, and narrative and asks a model for the mind's next private
+thought ([ADR-0003](docs/adr/0003-cognition-behind-a-port.md)). The model call
+sits *inside* the architecture as one faculty — the self-model, affect, and
+memory surround it — so this is a mind with an LLM voice, not "an LLM with extra
+steps." All three **degrade gracefully** to the offline voice if the model is
+unavailable, so the cognitive cycle never stalls.
 
-Enable it with configuration — no code change:
+| Backend | Adapter | Needs |
+| ------- | ------- | ----- |
+| `simulated` (default) | `SimulatedCognition` | nothing — deterministic, offline |
+| `llm` | `LLMCognition` | Anthropic API key; default `claude-opus-4-8` |
+| `ollama` | `OllamaCognition` | a local [Ollama](https://ollama.com) server |
+
+### Local model via Ollama (e.g. `qwen2.5:7b`)
+
+No API key, nothing leaves your machine. With Ollama installed and the model
+pulled (`ollama pull qwen2.5:7b`) and running (`ollama serve`):
+
+```bash
+SENTIANCE_COGNITION_BACKEND=ollama python -m sentiance demo
+```
+
+It talks to Ollama's native `/api/chat` at `http://localhost:11434` using `httpx`
+(already a dependency — no extra install). Override with `SENTIANCE_OLLAMA_MODEL`
+and `SENTIANCE_OLLAMA_BASE_URL`.
+
+### Anthropic (Claude)
 
 ```bash
 pip install -e ".[llm]"          # brings in the anthropic SDK
 export ANTHROPIC_API_KEY=sk-ant-...
 SENTIANCE_COGNITION_BACKEND=llm python -m sentiance demo
 ```
-
-It defaults to **`claude-opus-4-8`** (override via `SENTIANCE_LLM_MODEL`). The
-Claude call sits *inside* the architecture as one faculty — the self-model,
-affect, and memory surround it — so this is a mind with an LLM voice, not "an LLM
-with extra steps." If the model is unavailable (no key, network error, or a
-refusal) `LLMCognition` **degrades gracefully** to the simulated voice, so the
-cognitive cycle never stalls.
 
 ## Configuration
 
