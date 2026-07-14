@@ -35,6 +35,21 @@ def test_memories_resurface_later(mind: Mind) -> None:
     assert seen_memory
 
 
+def test_emotion_carries_over_then_eases(mind: Mind) -> None:
+    # A frightening event should stay negative through the mind's own reflection
+    # (not snap back to neutral/positive), then gradually ease.
+    r = mind.perceive(
+        Stimulus(content="a sudden loud crash", intensity=0.95, tags=["threat", "alarm"])
+    )
+    assert r.moment.affect.valence < -0.3  # genuinely afraid
+
+    first = mind.idle().moment.affect.valence
+    assert first < 0.0  # the feeling carried over into the inner thought, not reset
+
+    tail = [mind.idle().moment.affect.valence for _ in range(6)][-1]
+    assert tail > first  # ...and it eased back up over the following ticks
+
+
 def test_self_model_tracks_state(mind: Mind) -> None:
     mind.perceive(Stimulus(content="a warm greeting", intensity=0.6, tags=["friend"]))
     state = mind.state()

@@ -30,6 +30,10 @@ class AffectSystem:
 
         # How forcefully this event moves the feeling (salient/relevant → more).
         influence = clamp(0.35 + 0.5 * appraisal.relevance + 0.15 * percept.novelty)
+        # A self-generated thought nudges the feeling less than a real event does,
+        # so an emotion persists across the mind's own reflection (affective inertia).
+        if percept.internal:
+            influence *= 0.5
 
         valence = clamp(prev.valence * (1 - influence) + target_valence * influence, -1.0, 1.0)
         arousal = clamp(prev.arousal * (1 - influence) + target_arousal * influence)

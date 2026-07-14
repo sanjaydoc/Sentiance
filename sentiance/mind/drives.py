@@ -51,12 +51,14 @@ class Drives:
             # Social pleasant contact serves connection.
             Drive.CONNECTION: (0.6 if social else 0.0) + (0.3 if pleasant else 0.0),
         }
-        # A generic hedonic hint from the environment, if any.
-        if percept.valence_hint is not None:
-            contributions[Drive.CONNECTION] += 0.3 * percept.valence_hint
 
         dominant = max(contributions, key=lambda d: abs(contributions[d]))
         goal_congruence = clamp(contributions[dominant], -1.0, 1.0)
+        # Carry a felt-valence hint (e.g. from a self-generated thought) into the
+        # appraisal, so the mind's own reflection keeps the colour of its mood
+        # instead of resetting to neutral each tick.
+        if percept.valence_hint is not None:
+            goal_congruence = clamp(0.6 * goal_congruence + 0.4 * percept.valence_hint, -1.0, 1.0)
         relevance = clamp(max(abs(v) for v in contributions.values()))
         control = clamp(0.75 - 0.6 * threat + 0.15 * self.levels[Drive.SAFETY] - 0.3 * novelty)
 

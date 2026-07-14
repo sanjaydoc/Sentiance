@@ -23,4 +23,5 @@ class Perceptor:
             novelty=novelty,
             salience=salience,
             valence_hint=stimulus.valence_hint,
+            internal=stimulus.source == "inner",
         )

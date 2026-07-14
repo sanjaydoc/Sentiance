@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 from sentiance.mind.memory import Memory
-from sentiance.mind.state import ContentSource, Emotion, SelfModelState, Stimulus
+from sentiance.mind.state import AffectState, ContentSource, Emotion, SelfModelState, Stimulus
 from sentiance.mind.util import clamp
 
 if TYPE_CHECKING:
@@ -46,43 +46,43 @@ class SimulatedCognition:
     ) -> Stimulus | None:
         emotion = self_model.affect.emotion
         focus = self_model.current_focus
+        # Every self-generated thought inherits the current feeling (carryover).
+        vh = _carried_valence(self_model.affect)
+
+        def thought(content: str, *, intensity: float, tags: list[str]) -> Stimulus:
+            return Stimulus(
+                content=content, source="inner", intensity=intensity, tags=tags, valence_hint=vh
+            )
 
         if emotion in (Emotion.CURIOSITY, Emotion.SURPRISE):
             related = memory.associations(focus.split()[-1] if focus else "")
             hint = f" It reminds me of {related[0]}." if related else ""
-            return Stimulus(
-                content=f"I wonder what \"{focus}\" really means.{hint}",
-                source="inner",
+            return thought(
+                f"I wonder what \"{focus}\" really means.{hint}",
                 intensity=0.4,
                 tags=["question", "reflection"],
             )
         if emotion is Emotion.FEAR:
-            return Stimulus(
-                content=f"I should be careful about \"{focus}\".",
-                source="inner",
+            return thought(
+                f"I should be careful about \"{focus}\".",
                 intensity=0.45,
                 tags=["caution", "reflection"],
             )
         if emotion in (Emotion.JOY, Emotion.CONTENTMENT):
-            return Stimulus(
-                content=f"I'd like to stay with \"{focus}\" a little longer.",
-                source="inner",
+            return thought(
+                f"I'd like to stay with \"{focus}\" a little longer.",
                 intensity=0.3,
                 tags=["desire", "reflection"],
-                valence_hint=0.4,
             )
         if emotion is Emotion.SADNESS:
-            return Stimulus(
-                content=f"I keep returning to \"{focus}\".",
-                source="inner",
+            return thought(
+                f"I keep returning to \"{focus}\".",
                 intensity=0.3,
                 tags=["rumination", "reflection"],
-                valence_hint=-0.3,
             )
         if emotion is Emotion.CONFUSION:
-            return Stimulus(
-                content=f"I'm trying to make sense of \"{focus}\".",
-                source="inner",
+            return thought(
+                f"I'm trying to make sense of \"{focus}\".",
                 intensity=0.35,
                 tags=["reflection"],
             )
@@ -127,15 +127,21 @@ def _compose_prompt(
     return system, user
 
 
-def _thought_to_stimulus(text: str, arousal: float) -> Stimulus | None:
+def _carried_valence(affect: AffectState) -> float:
+    """How much of the current feeling a self-generated thought inherits."""
+    return round(clamp(affect.valence * 0.7, -1.0, 1.0), 3)
+
+
+def _thought_to_stimulus(text: str, affect: AffectState) -> Stimulus | None:
     text = text.strip()
     if not text:
         return None
     return Stimulus(
         content=text,
         source="inner",
-        intensity=clamp(0.3 + 0.4 * arousal),
+        intensity=clamp(0.3 + 0.4 * affect.arousal),
         tags=["reflection", "inner"],
+        valence_hint=_carried_valence(affect),
     )
 
 
@@ -176,7 +182,7 @@ class LLMCognition:
         except Exception:  # noqa: BLE001 - the inner loop must survive any API error
             return self.fallback.deliberate(moment_content, source, self_model, memory)
 
-        return _thought_to_stimulus(text, self_model.affect.arousal)
+        return _thought_to_stimulus(text, self_model.affect)
 
     # --- internals --------------------------------------------------------
 
@@ -246,7 +252,7 @@ class OllamaCognition:
             text = self._complete(self._ensure_client(), moment_content, source, self_model)
         except Exception:  # noqa: BLE001 - a local server hiccup must not crash the mind
             return self.fallback.deliberate(moment_content, source, self_model, memory)
-        return _thought_to_stimulus(text, self_model.affect.arousal)
+        return _thought_to_stimulus(text, self_model.affect)
 
     # --- internals --------------------------------------------------------
 

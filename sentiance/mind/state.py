@@ -75,6 +75,7 @@ class Percept(BaseModel):
     novelty: float = Field(ge=0.0, le=1.0)  # prediction error from the world-model
     salience: float = Field(ge=0.0, le=1.0)
     valence_hint: float | None = None
+    internal: bool = False  # self-generated (an inner thought) vs. from the world
 
 
 # --- Appraisal & affect ---------------------------------------------------
