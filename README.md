@@ -73,10 +73,16 @@ python -m sentiance chat
 ```
 
 Type experiences and watch the mind perceive, feel, remember, and — after each
-one — reflect for a couple of ticks. Append `#tags` to hint appraisal
-(`#threat`, `#friend`, `#reward`, …); `:idle N` to let it wander, `:self` to see
-its self-model, `:quit` to leave. With `SENTIANCE_COGNITION_BACKEND=ollama` the
-reflections come from your local model (e.g. `qwen2.5:7b`).
+one — reflect for a couple of ticks. With `SENTIANCE_COGNITION_BACKEND=ollama`
+the reflections come from your local model (e.g. `qwen2.5:7b`) and **stream in
+word-by-word** as it thinks. Append `#tags` to hint appraisal (`#threat`,
+`#friend`, `#reward`, …); `:idle N` to let it wander, `:self` to see its
+self-model, `:save` to persist now, `:quit` to leave.
+
+Emotions **carry over** — a frightening experience stays with the mind through
+its next few thoughts, then eases. And the mind is **persistent**: chat saves to
+`~/.sentiance/<name>.json` on exit and reloads it next run, so the same
+individual continues across sessions rather than waking blank.
 
 ```
 you> a friend calls my name across the room #friend #voice
@@ -130,11 +136,12 @@ sentiance/
     metacognition.py # first-person self-report
     cognition.py     # Cognition port: Simulated (offline) + LLM (drop-in)
     workspace.py     # global broadcast
+    persistence.py   # durable identity (save/load across runs)
     mind.py          # the cycle
   app.py       # FastAPI runtime
-  chat.py      # interactive REPL
+  chat.py      # interactive REPL (streaming, persistent)
   __main__.py  # serve / demo / chat
-tests/         # faculties + full-cycle + HTTP + LLM/Ollama + chat (32 tests)
+tests/         # faculties + cycle + HTTP + LLM/Ollama + chat + persistence (43 tests)
 docs/adr/      # decision records
 ```
 

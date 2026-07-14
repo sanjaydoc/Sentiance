@@ -187,7 +187,11 @@ sentiance/
   inner monologue conditioned on the self-model/affect/narrative, behind the same
   `Cognition` port, with graceful fallback. Enable via
   `SENTIANCE_COGNITION_BACKEND=llm`.
+- **Persistence** — *implemented* (`mind/persistence.py`): a durable autobiography
+  (memory, self-model, drives, mood, world-model) saved to disk and reloaded, so
+  a mind is continuous across runs. Chat auto-loads/saves per named agent.
+- **Emotional carryover** — *implemented*: self-generated thoughts inherit the
+  current feeling and move affect less, so emotions persist then ease.
 - **Learned appraisal & world-model** replacing the rule/frequency stand-ins.
 - **Goals & planning** on top of drives (means-end deliberation).
-- **Persistence** — a durable autobiography across runs (identity over time).
 - **Multi-mind** — several minds sharing a workspace (social cognition).
