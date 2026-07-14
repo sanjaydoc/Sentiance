@@ -38,6 +38,7 @@ def snapshot(mind: Mind) -> dict:
         "temperament": mind.temperament.dump(),
         "frustration": mind.frustration.dump(),
         "grief": mind.grief.dump(),
+        "volition": mind.volition.dump(),
     }
 
 
@@ -56,6 +57,7 @@ def restore(mind: Mind, data: dict) -> None:
     mind.temperament.load(data.get("temperament", {}))
     mind.frustration.load(data.get("frustration", {}))
     mind.grief.load(data.get("grief", {}))
+    mind.volition.load(data.get("volition", {}))
 
 
 def save(mind: Mind, path: str | Path) -> None:

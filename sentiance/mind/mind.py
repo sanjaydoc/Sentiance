@@ -50,7 +50,8 @@ from sentiance.mind.state import (
     Stimulus,
 )
 from sentiance.mind.temperament import Needs, Temperament
-from sentiance.mind.util import clamp, strip_narration
+from sentiance.mind.util import clamp, strip_narration, tokenize
+from sentiance.mind.volition import Volition
 from sentiance.mind.workspace import GlobalWorkspace
 from sentiance.mind.world_model import WorldModel
 
@@ -99,6 +100,7 @@ class Mind:
         self.frustration = Frustration()
         self.empathy = Empathy()
         self.grief = Grief()
+        self.volition = Volition()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -116,6 +118,7 @@ class Mind:
         self.last_empathy: tuple[str, float] | None = None  # whose feeling she caught
         self.grieving: bool = False  # mourning a loss, for the UI
         self.last_dream: object | None = None  # the last dream she had, for the UI
+        self.last_effort: bool = False  # she held focus by will this tick, for the UI
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -208,6 +211,7 @@ class Mind:
                 )
 
         self.needs.rest_now()  # a night's rest
+        self.volition.restore()  # willpower is renewed by rest
         mv = self.affect.mood_valence
         self.affect = AffectState(
             valence=round(mv * 0.4, 3),
@@ -391,8 +395,33 @@ class Mind:
                 top.urgency = clamp(top.urgency + 0.2)  # anger fuels the pursuit
             self.last_anger = True
 
-        # 4. Attention competition over candidate contents.
-        winner, also = self.attention.select(self._candidates(percept), self.affect.arousal)
+        # 4. Attention competition over candidate contents — but first, volition
+        #    gets a say: she can spend effort to hold focus on what she means to be
+        #    doing when something flashier is pulling her away (and, out of effort,
+        #    she can't — the impulse wins).
+        candidates = self._candidates(percept)
+        goal = self.goals.top()
+        # Self-control is the power to resist an *impulse* — when a strong feeling
+        # is about to hijack her from what she means to be doing, she can spend
+        # effort to hold the line. (It stays out of ordinary perception, so it
+        # doesn't dampen her curiosity about the world.)
+        leader = max(candidates, key=lambda c: c.salience)
+        impulse = leader.source is ContentSource.FEELING
+        if goal is not None and impulse:
+            goal_tokens = set(tokenize(goal.description))
+            relevant = [
+                c.source is not ContentSource.FEELING
+                and (
+                    bool(set(tokenize(c.content)) & goal_tokens)
+                    or c.content.startswith("my intention to")
+                )
+                for c in candidates
+            ]
+            self.last_effort = self.volition.focus(candidates, relevant)
+        else:
+            self.volition.recover()
+            self.last_effort = False
+        winner, also = self.attention.select(candidates, self.affect.arousal)
         moment = ConsciousMoment(
             tick=self.tick_no,
             content=winner.content,

@@ -98,6 +98,7 @@ def _print_self(mind: Mind) -> None:
     n, t = mind.needs, mind.temperament
     print(f"  needs:     rest {n.rest:.2f}, stimulation {n.stimulation:.2f}, "
           f"connection {n.connection:.2f}")
+    print(f"  willpower: {mind.volition.effort:.2f}")
     drift = t.drift_from_innate()
     print(f"  temperament: curiosity {t.curiosity:.2f}, anxiety {t.anxiety:.2f}, "
           f"optimism {t.optimism:.2f}")
@@ -143,6 +144,8 @@ def _announce_self_judgment(mind: Mind) -> None:
     if mind.grieving:
         who = ", ".join(f"@{n}" for n in mind.grief.mourning_for())
         print(f"      (she is grieving {who})")
+    if mind.last_effort:
+        print(f"      (she holds her focus by will — effort now {mind.volition.effort:.2f})")
 
 
 def _reflect(mind: Mind) -> None:
