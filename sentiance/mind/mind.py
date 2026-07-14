@@ -25,6 +25,7 @@ from sentiance.mind.conscience import Conscience, SelfJudgment
 from sentiance.mind.curiosity import Curiosity
 from sentiance.mind.drives import Drives
 from sentiance.mind.embeddings import build_embedder
+from sentiance.mind.empathy import Empathy
 from sentiance.mind.frustration import Frustration
 from sentiance.mind.goals import GoalSystem
 from sentiance.mind.imagination import Imagination, Prospect
@@ -94,6 +95,7 @@ class Mind:
         self.curiosity = Curiosity()
         self.conscience = Conscience()
         self.frustration = Frustration()
+        self.empathy = Empathy()
         self.imagination = Imagination(
             self.perceptor, self.drives, self.affect_system, self.temperament
         )
@@ -108,6 +110,7 @@ class Mind:
         self.last_self_judgment: SelfJudgment | None = None  # pride/disappointment
         self.last_anger: bool = False  # frustration boiled over this tick, for the UI
         self.longing: tuple[str, float] | None = None  # who she misses, for the UI
+        self.last_empathy: tuple[str, float] | None = None  # whose feeling she caught
 
         # Per-tick scratch shared with the broadcast subscribers.
         self._appraisal = Appraisal(novelty=0.0, goal_congruence=0.0, control=1.0, relevance=0.0)
@@ -274,6 +277,24 @@ class Mind:
                 update={"valence": clamp(self.affect.valence - 0.15 * ache, -1.0, 1.0)}
             )
             self.needs.connection = clamp(self.needs.connection - 0.1 * ache)
+
+        # 3b-ii. Empathy: if a present person's feeling shows, she catches it —
+        #        more from someone she's close to, a little from anyone.
+        self.last_empathy = None
+        if present:
+            felt = self.empathy.read(percept.content)
+            if felt is not None:
+                other_v, other_a = felt
+                w = self.empathy.contagion(self.relationships.bond(present))
+                self.affect = self.affect.model_copy(
+                    update={
+                        "valence": clamp(
+                            (1 - w) * self.affect.valence + w * other_v, -1.0, 1.0
+                        ),
+                        "arousal": clamp((1 - w) * self.affect.arousal + w * other_a),
+                    }
+                )
+                self.last_empathy = (present[0], round(other_v, 3))
         self.needs.step(
             novelty=percept.novelty,
             arousal=self.affect.arousal,

@@ -136,6 +136,10 @@ def _announce_self_judgment(mind: Mind) -> None:
     if mind.longing is not None:
         name, ache = mind.longing
         print(f"      (she misses @{name} — a longing of {ache:.2f})")
+    if mind.last_empathy is not None:
+        name, ov = mind.last_empathy
+        mood = "joy" if ov > 0.2 else "sorrow" if ov < -0.2 else "feeling"
+        print(f"      (she catches @{name}'s {mood})")
 
 
 def _reflect(mind: Mind) -> None:
