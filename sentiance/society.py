@@ -209,17 +209,28 @@ def run_society(
     backend = people[0].mind.settings.cognition_backend
     emit(f"— a house wakes: {names} (cognition: {backend}) —\n")
 
-    for _ in range(steps):
-        for me, affect, perceived, notes in society.step():
-            emit(f"  [{me.name} @ {me.room}] {perceived}")
-            emit(f"      [{affect.emotion.value} v{affect.valence:+.2f}]"
-                 + (f"  ·  {'; '.join(notes)}" if notes else ""))
-            if me.last_utterance:
-                emit(f"      {me.name}: {me.last_utterance}")
-        emit("")
+    def _remember() -> None:
+        if persist:
+            for i in people:
+                i.mind.save(default_persist_path(i.mind.settings))
 
-    if persist:
-        for i in people:
-            i.mind.save(default_persist_path(i.mind.settings))
-        emit("— the house sleeps; each remembers the others —")
+    # Save as we go (and on interrupt), so a long or halted run never loses their
+    # bonds — the memory files appear after the first few moments, not only at the end.
+    try:
+        for tick in range(steps):
+            for me, affect, perceived, notes in society.step():
+                emit(f"  [{me.name} @ {me.room}] {perceived}")
+                emit(f"      [{affect.emotion.value} v{affect.valence:+.2f}]"
+                     + (f"  ·  {'; '.join(notes)}" if notes else ""))
+                if me.last_utterance:
+                    emit(f"      {me.name}: {me.last_utterance}")
+            emit("")
+            if (tick + 1) % 4 == 0:
+                _remember()  # checkpoint their memories periodically
+    except KeyboardInterrupt:
+        emit("\n  (left early)")
+    finally:
+        _remember()
+        if persist:
+            emit("— the house sleeps; each remembers the others —")
     return society
