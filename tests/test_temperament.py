@@ -49,6 +49,27 @@ def test_an_anxious_mind_feels_a_threat_more_than_an_optimistic_one() -> None:
     assert anxious.perceive(stim).moment.affect.valence < sunny.perceive(stim).moment.affect.valence
 
 
+def test_temperament_colours_even_an_ordinary_moment() -> None:
+    sunny = Mind(settings=Settings(temperament_anxiety=0.1, temperament_optimism=0.9))
+    anxious = Mind(settings=Settings(temperament_anxiety=0.9, temperament_optimism=0.2))
+    # A plain, non-threatening novelty — the kind of moment where personality
+    # should still show, not only when something is scary.
+    stim = Stimulus(content="a strange new symbol appears", intensity=0.5)
+    s = sunny.perceive(stim).moment.affect.valence
+    a = anxious.perceive(stim).moment.affect.valence
+    assert s - a > 0.3  # the sunny mind feels it markedly more brightly
+
+
+def test_a_neutral_temperament_is_left_unchanged() -> None:
+    from sentiance.mind.state import Appraisal
+    from sentiance.mind.temperament import Temperament
+
+    ap = Appraisal(novelty=0.7, goal_congruence=0.3, control=0.6, relevance=0.5)
+    shaped = Temperament(curiosity=0.5, anxiety=0.5, optimism=0.5).shape(ap)
+    assert shaped.goal_congruence == ap.goal_congruence  # 0.5 across → no bias
+    assert shaped.control == ap.control
+
+
 def test_needs_persist(tmp_path) -> None:
     mind = Mind(settings=Settings())
     for _ in range(6):

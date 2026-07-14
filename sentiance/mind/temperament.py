@@ -45,11 +45,23 @@ class Temperament:
             self.innate = (self.curiosity, self.anxiety, self.optimism)
 
     def shape(self, appraisal: Appraisal) -> Appraisal:
-        """Bias an appraisal by disposition, before it becomes feeling."""
-        gc = appraisal.goal_congruence + (self.optimism - 0.5) * 0.3
-        if appraisal.goal_congruence < 0:  # anxiety deepens the bad
+        """Bias an appraisal by disposition, before it becomes feeling.
+
+        At a neutral temperament (0.5 across the board) this changes nothing; the
+        further a trait is from the middle, the more it colours *every* moment —
+        so two minds with different natures genuinely feel the same event
+        differently, not only when it is threatening.
+        """
+        gc = appraisal.goal_congruence
+        # Optimism vs pessimism: a standing lean on how things land, good or bad.
+        gc += (self.optimism - 0.5) * 0.5
+        # Anxiety deepens the bad...
+        if appraisal.goal_congruence < 0:
             gc += (self.anxiety - 0.5) * -0.4
-        gc += (self.curiosity - 0.5) * 0.3 * appraisal.novelty  # curiosity rewards the new
+        # ...and, to the anxious, the *uncertain* itself feels risky rather than
+        # exciting — so novelty pulls their feeling down where it lifts the curious.
+        gc -= (self.anxiety - 0.5) * 0.4 * appraisal.novelty
+        gc += (self.curiosity - 0.5) * 0.3 * appraisal.novelty
         control = clamp(appraisal.control - (self.anxiety - 0.5) * 0.4)
         return appraisal.model_copy(
             update={"goal_congruence": clamp(gc, -1.0, 1.0), "control": control}
