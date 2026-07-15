@@ -129,7 +129,7 @@ Code & runtime: [github.com/sanjaydoc/Sentiance](https://github.com/sanjaydoc/Se
 @software{sentiance_fused,
   title  = {Sentiance: a functional cognitive architecture with a
             cognition-conditioned language model (the fused mind)},
-  author = {Sanjay Anbu},
+  author = {Dr. Sanjay Anbu},
   year   = {2026},
   url    = {https://github.com/sanjaydoc/Sentiance}
 }
