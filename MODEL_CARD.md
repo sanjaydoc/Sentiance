@@ -14,6 +14,12 @@ tags:
 
 # Model card — Sentiance fused mind (`sentiance-fused`)
 
+> **A small language model that thinks *through* a cognitive architecture's numeric
+> state.** ⚠️ Needs the [**Sentiance** runtime](https://github.com/sanjaydoc/Sentiance)
+> to run — the adapter alone is just a Qwen2.5-0.5B fine-tune; the hybrid behaviour
+> comes from feeding the live state vector `m_t` through the trained state encoder.
+> Author: **Dr. Sanjay Anbu**.
+
 A small language model **conditioned on a cognitive-architecture state vector**. It
 is the "fused mind" of the [Sentiance](https://github.com/sanjaydoc/Sentiance)
 project (Path B / ADR 0005): a Qwen2.5-0.5B base with a LoRA adapter **and** a
