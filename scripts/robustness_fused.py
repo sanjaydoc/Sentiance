@@ -101,12 +101,18 @@ def main() -> None:
           f"(min {min(rs):+.3f}, max {max(rs):+.3f})")
     print(f"  positive-r seeds: {n_pos}/{len(results)}   "
           f"strong (r≥0.5 & perm p≤0.05): {n_strong}/{len(results)}")
-    if n_strong >= 0.6 * len(results):
-        verdict = ("ROBUST — the m_t effect holds across most seeds "
+    # ROBUST requires the effect to hold on (nearly) *every* seed — no seed flipping
+    # negative, and most clearing significance. A 2/3 with a negative outlier and a
+    # large std is "directional but noisy", not robust — don't overclaim.
+    n = len(results)
+    all_positive = min(rs) > 0
+    if n_strong >= 0.8 * n and all_positive:
+        verdict = ("ROBUST — the m_t effect holds across (nearly) all seeds "
                    "(publishable with error bars)")
-    elif n_pos >= 0.6 * len(results):
-        verdict = ("DIRECTIONAL BUT NOISY — mostly positive but high variance; "
-                   "report the spread honestly")
+    elif n_pos >= 0.6 * n and n_strong >= 0.5 * n:
+        verdict = ("DIRECTIONAL BUT NOISY — mostly positive and often significant, but "
+                   "high variance and a failing seed remain; report mean ± std honestly, "
+                   "and note the effect is data-scale-limited")
     else:
         verdict = ("NOT ROBUST — the single-seed result was largely luck; "
                    "needs more data or a stronger conditioning path")
