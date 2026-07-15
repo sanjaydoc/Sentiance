@@ -52,6 +52,10 @@ def main() -> None:
 
     import json  # noqa: PLC0415
 
+    from sentiance.core.dotenv import load_dotenv  # noqa: PLC0415
+
+    load_dotenv()  # pick up HF_TOKEN from .env before transformers reads it
+
     import torch  # noqa: PLC0415
     from peft import LoraConfig, get_peft_model  # noqa: PLC0415
     from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415

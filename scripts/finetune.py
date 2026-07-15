@@ -46,6 +46,10 @@ def main() -> None:
 
     import os  # noqa: PLC0415
 
+    from sentiance.core.dotenv import load_dotenv  # noqa: PLC0415
+
+    load_dotenv()  # pick up HF_TOKEN from .env before transformers reads it
+
     import torch  # noqa: PLC0415
     from datasets import load_dataset  # noqa: PLC0415
     from peft import LoraConfig  # noqa: PLC0415

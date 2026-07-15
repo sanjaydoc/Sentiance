@@ -93,6 +93,12 @@ def parse_cli(argv: list[str]) -> tuple[str, str | None, str | None, str | None]
 
 
 def main() -> None:
+    # Load .env early so HF_TOKEN (for the finetuned/fused backends) and any
+    # SENTIANCE_* overrides are in the environment before anything reads them.
+    from sentiance.core.dotenv import load_dotenv
+
+    load_dotenv()
+
     command, as_name, trace, preset = parse_cli(sys.argv[1:])
 
     # Flags set env vars; clear the settings cache so they take effect this run.
