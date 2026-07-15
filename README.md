@@ -792,8 +792,9 @@ Holding the prompt identical and changing only the conditioning vector, it repor
    means the *learned mapping* steers, not noise.
 2. **Affect congruence** — Pearson **`r`** between the state's valence and how far
    `m_t` pushes the output positive-vs-negative (a valence lexicon), with a
-   **sign-test p**. Positive `r` (and control `r ≈ 0`) = `m_t` injects *state-congruent*
-   affect the prompt text alone didn't.
+   **permutation-test p** (`--perm`, default 5000) and a **multi-seed shuffled-`m_t`
+   control** (`--control-seeds`, mean ± std). Positive `r` (control `r ≈ 0`) = `m_t`
+   injects *state-congruent* affect the prompt text alone didn't.
 3. **Cross-state dose-response** — one fixed prompt, borrowed `m_t` swept across
    states; the **slope** of output-affect on borrowed valence.
 

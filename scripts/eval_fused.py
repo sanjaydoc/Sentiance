@@ -43,6 +43,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--base", default="Qwen/Qwen2.5-0.5B-Instruct", help="base model id")
     ap.add_argument("--report", default="eval/fused_eval.md", help="markdown report path")
     ap.add_argument("--samples", type=int, default=3, help="qualitative greedy examples to show")
+    ap.add_argument("--perm", type=int, default=5000,
+                    help="permutation-test iterations for the congruence p-value")
+    ap.add_argument("--control-seeds", type=int, default=5,
+                    help="shuffled-m_t control repeats (report mean ± std of its r)")
     return ap.parse_args()
 
 
@@ -103,6 +107,13 @@ def _slope(xs: list[float], ys: list[float]) -> float:
     return sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False)) / denom if denom else 0.0
 
 
+def _pstdev(xs: list[float]) -> float:
+    if len(xs) < 2:
+        return 0.0
+    m = _mean(xs)
+    return (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5
+
+
 def _sign_test_p(k: int, n: int) -> float:
     """Two-sided exact binomial p for k of n agreeing under H0: p=0.5."""
     if n == 0:
@@ -110,6 +121,19 @@ def _sign_test_p(k: int, n: int) -> float:
     k = max(k, n - k)  # upper tail
     tail = sum(comb(n, i) for i in range(k, n + 1)) / (2 ** n)
     return min(1.0, 2 * tail)
+
+
+def _perm_p(xs: list[float], ys: list[float], r_obs: float, iters: int, seed: int = 12345) -> float:
+    """Permutation-test p for |corr(xs, ys)| ≥ |r_obs| by shuffling the pairing.
+    A distribution-free significance test that doesn't rely on n being large."""
+    rp = random.Random(seed)
+    ys2 = list(ys)
+    hits = 0
+    for _ in range(iters):
+        rp.shuffle(ys2)
+        if abs(_pearson(xs, ys2)) >= abs(r_obs):
+            hits += 1
+    return (hits + 1) / (iters + 1)
 
 
 def main() -> None:
@@ -256,28 +280,44 @@ def main() -> None:
           f"state_dim {cfg['state_dim']}\n")
     zero = [0.0] * len(probes[0]["m_t"])
     rows = []
-    kl_real, kl_ctrl = [], []
-    d_affect_real, d_affect_ctrl, valences = [], [], []
+    kl_real = []
+    d_affect_real, valences = [], []
+    cache = []  # (probe, inputs, affect_zero) reused by the multi-seed control
     for p in probes:
         inp = _prompt_ids(p["snap"], p["content"], p["source"])
         lp_zero = _logprobs(inp, zero)
+        affect_zero = _affect(lp_zero)
         lp_real = _logprobs(inp, p["m_t"])
-        lp_ctrl = _logprobs(inp, p["shuffled"])
         kl_real.append(_kl(lp_real, lp_zero))
-        kl_ctrl.append(_kl(lp_ctrl, lp_zero))
-        da_real = _affect(lp_real) - _affect(lp_zero)
-        da_ctrl = _affect(lp_ctrl) - _affect(lp_zero)
+        da_real = _affect(lp_real) - affect_zero
         d_affect_real.append(da_real)
-        d_affect_ctrl.append(da_ctrl)
         valences.append(p["valence"])
+        cache.append((p, inp, affect_zero))
         rows.append((p["label"], p["emotion"], p["valence"], kl_real[-1], da_real))
         print(f"  {p['label']:10} {p['emotion']:9} v{p['valence']:+.2f}  "
               f"KL(real)={kl_real[-1]:.3f}  ΔAffect={da_real:+.3f}")
 
     r_real = _pearson(valences, d_affect_real)
-    r_ctrl = _pearson(valences, d_affect_ctrl)
     agree = sum(1 for v, d in zip(valences, d_affect_real, strict=False) if (v >= 0) == (d >= 0))
     p_sign = _sign_test_p(agree, len(probes))
+    p_perm = _perm_p(valences, d_affect_real, r_real, args.perm)
+
+    # multi-seed shuffled-m_t control: repeat with different shuffles, collect r
+    # each time — a robust null (should sit near 0) instead of a single draw.
+    ctrl_rs, kl_ctrl = [], []
+    for s in range(max(1, args.control_seeds)):
+        rc = random.Random(1000 + s)
+        d_ctrl = []
+        for p, inp, affect_zero in cache:
+            sh = p["m_t"][:]
+            rc.shuffle(sh)
+            lp_sh = _logprobs(inp, sh)
+            d_ctrl.append(_affect(lp_sh) - affect_zero)
+            if s == 0:
+                kl_ctrl.append(_kl(lp_sh, _logprobs(inp, zero)))
+        ctrl_rs.append(_pearson(valences, d_ctrl))
+    r_ctrl = _mean(ctrl_rs)
+    r_ctrl_sd = _pstdev(ctrl_rs)
 
     # --- metric 3: cross-state dose-response on a fixed neutral prompt ------
     carrier = min(probes, key=lambda p: abs(p["valence"]))  # most neutral prompt
@@ -295,19 +335,19 @@ def main() -> None:
     print(f"  Prediction shift   : mean KL(real‖zero) = {_mean(kl_real):.3f}   "
           f"vs control KL(shuffled‖zero) = {_mean(kl_ctrl):.3f}")
     print(f"  Affect congruence  : r(valence, ΔAffect) = {r_real:+.3f}   "
-          f"(control r = {r_ctrl:+.3f})")
-    print(f"                       sign agreement = {agree}/{len(probes)}  "
-          f"(sign-test p = {p_sign:.3f})")
+          f"(control r = {r_ctrl:+.3f} ± {r_ctrl_sd:.3f}, {args.control_seeds} seeds)")
+    print(f"                       permutation p = {p_perm:.4f} ({args.perm} iters)  ·  "
+          f"sign agreement {agree}/{len(probes)} (p = {p_sign:.3f})")
     print(f"  Cross-state dose   : slope = {dose_slope:+.3f}  r = {dose_r:+.3f}  "
           f"(fixed '{carrier['label']}' prompt, borrowed m_t)")
     # Verdict keys on *congruence* — does m_t move affect in the state's direction,
     # significantly, with a dose-response — NOT on raw KL magnitude (a shuffled
     # vector can shift the distribution just as much; what matters is the *direction*).
     beats_control = abs(r_real) > abs(r_ctrl) + 0.2
-    if r_real >= 0.5 and p_sign <= 0.05 and dose_slope > 0 and beats_control:
+    if r_real >= 0.5 and p_perm <= 0.05 and dose_slope > 0 and beats_control:
         verdict = (f"STRONG — m_t steers affect congruently with state "
-                   f"(r={r_real:+.2f}, sign-test p={p_sign:.3f}, dose slope={dose_slope:+.2f}; "
-                   f"control r={r_ctrl:+.2f})")
+                   f"(r={r_real:+.2f}, perm p={p_perm:.4f}, dose slope={dose_slope:+.2f}; "
+                   f"control r={r_ctrl:+.2f}±{r_ctrl_sd:.2f})")
     elif r_real >= 0.3 and beats_control:
         verdict = (f"MODERATE — congruent trend (r={r_real:+.2f}); tighten with "
                    "more varied data or higher --n-prefix")
@@ -337,8 +377,9 @@ def main() -> None:
         f"- **Prediction shift**: mean `KL(real‖zero)` = **{_mean(kl_real):.3f}** "
         f"vs control (shuffled m_t) `KL` = {_mean(kl_ctrl):.3f}.",
         f"- **Affect congruence**: Pearson `r(valence, ΔAffect)` = **{r_real:+.3f}** "
-        f"(control r = {r_ctrl:+.3f}); sign agreement {agree}/{len(probes)}, "
-        f"sign-test p = {p_sign:.3f}.",
+        f"(shuffled-m_t control r = {r_ctrl:+.3f} ± {r_ctrl_sd:.3f} over "
+        f"{args.control_seeds} seeds). **Permutation p = {p_perm:.4f}** ({args.perm} iters); "
+        f"sign agreement {agree}/{len(probes)}, sign-test p = {p_sign:.3f}.",
         f"- **Cross-state dose-response**: slope = **{dose_slope:+.3f}**, r = {dose_r:+.3f} "
         f"(fixed `{carrier['label']}` prompt, borrowed m_t).", "",
         f"**Verdict:** {verdict}.", "",

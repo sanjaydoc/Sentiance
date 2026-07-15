@@ -4,9 +4,10 @@ REM  train_fused.bat  --  collect -> prepare -> train the fused mind (Path B).
 REM
 REM  The fused mind conditions a transformer on the whole cognitive cycle as a
 REM  numeric vector m_t (ADR 0005). This script runs the entire pipeline:
-REM    1. collect fresh traces that carry m_t (state_vec)
-REM    2. build the fused dataset (keeps m_t per example)
+REM    1. collect a large, varied batch of traces carrying m_t (state_vec)
+REM    2. build the fused dataset (state-blind: m_t is the only state channel)
 REM    3. train LoRA + the state encoder end-to-end (6 GB-tuned)
+REM    4. measure whether m_t actually steers her (quantitative ablation)
 REM
 REM  Run it from the repo root with your training venv active, e.g.:
 REM      .venv312\Scripts\activate.bat
@@ -23,7 +24,7 @@ if "%TRACES%"==""   set "TRACES=data\traces_fused.jsonl"
 if "%OUTDIR%"==""   set "OUTDIR=data\fused"
 if "%MODEL%"==""    set "MODEL=models\sentiance-fused"
 if "%EPOCHS%"==""   set "EPOCHS=4"
-if "%NPREFIX%"==""  set "NPREFIX=8"
+if "%NPREFIX%"==""  set "NPREFIX=16"
 
 REM --- go to the repo root (this script lives in scripts\) --------------------
 cd /d "%~dp0.."
@@ -47,19 +48,28 @@ echo(
 set "SENTIANCE_COGNITION_BACKEND=%BACKEND%"
 
 REM ---------------------------------------------------------------------------
-echo [1/4] Collecting fresh traces (each run appends to %TRACES%)...
-echo   (pass the path explicitly to --trace; a bare --trace defaults to data\traces.jsonl)
+echo [1/5] Collecting a large, varied batch of traces (appends to %TRACES%)...
+echo   (weighted toward solo 'live' across many natures for diversity; a bare
+echo    --trace would default to data\traces.jsonl, so the path is passed explicitly)
 echo(
+REM — solo lives across many distinct natures (the bulk; least repetitive,
+REM   each mind explores its own world, so states span the whole range) —
+for %%N in (Iris Milo Rhea Cass Aria Nova Sol Wren Juno Bram) do (
+  echo   live --as %%N
+  python -m sentiance live --as %%N --trace "%TRACES%"
+)
+REM — a couple of society runs for social/relational states (meet, bond, part) —
 python -m sentiance society --trace "%TRACES%"
 python -m sentiance society --trace "%TRACES%"
-python -m sentiance live --as Iris --trace "%TRACES%"
-python -m sentiance live --as Milo --trace "%TRACES%"
-python -m sentiance live --as Cass --trace "%TRACES%"
-python -m sentiance chat --preset --as Rhea --trace "%TRACES%"
+REM — preset chats across natures for the full emotional sweep + varied people —
+for %%N in (Iris Cass Rhea Milo) do (
+  echo   chat --preset --as %%N
+  python -m sentiance chat --preset --as %%N --trace "%TRACES%"
+)
 
 REM ---------------------------------------------------------------------------
 echo(
-echo [2/4] Checking the traces carry m_t (state_vec)...
+echo [2/5] Checking the traces carry m_t (state_vec)...
 if not exist "%TRACES%" (
   echo(
   echo   ERROR: %TRACES% was not created — the collection runs wrote no traces.
@@ -76,7 +86,7 @@ if errorlevel 1 (
 
 REM ---------------------------------------------------------------------------
 echo(
-echo [3/4] Building the fused dataset (keeps m_t per example)...
+echo [3/5] Building the fused dataset (state-blind: m_t is the only state channel)...
 python scripts\prepare_data.py --traces "%TRACES%" --out "%OUTDIR%" --fused
 if errorlevel 1 goto :fail
 if not exist "%OUTDIR%\train.jsonl" (
@@ -86,11 +96,17 @@ if not exist "%OUTDIR%\train.jsonl" (
 
 REM ---------------------------------------------------------------------------
 echo(
-echo [4/4] Training the fused mind (LoRA + state encoder, end-to-end)...
+echo [4/5] Training the fused mind (LoRA + state encoder, end-to-end)...
 echo       ^(look for "device: cuda" below; on CPU this is very slow^)
 echo(
 python scripts\finetune_fused.py --train "%OUTDIR%\train.jsonl" --out "%MODEL%" --epochs %EPOCHS% --n-prefix %NPREFIX%
 if errorlevel 1 goto :fail
+
+REM ---------------------------------------------------------------------------
+echo(
+echo [5/5] Measuring whether m_t actually steers her (quantitative ablation)...
+echo(
+python scripts\eval_fused.py --model "%MODEL%"
 
 echo(
 echo === Done. The fused mind is saved to %MODEL% ===
