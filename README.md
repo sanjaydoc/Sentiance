@@ -154,7 +154,9 @@ set SENTIANCE_COGNITION_BACKEND=fused
 python -m sentiance chat
 python scripts\eval_fused.py --model models\sentiance-fused   REM ablation: does m_t steer her?
 ```
-Useful flags for `finetune_fused.py`: `--n-prefix 16` (stronger conditioning),
+`--fused` is **state-blind** by default (`m_t` is the model's only state channel);
+add `--state-in-prompt` to *both* `prepare_data.py` and `finetune_fused.py` to build
+the ablation control. Other `finetune_fused.py` flags: `--n-prefix` (default 16),
 `--epochs`, `--base`. (Fresh traces required — old ones predate `state_vec`.)
 
 **HTTP API** (while `python -m sentiance` is serving)
@@ -727,30 +729,46 @@ Or step by step (tested end-to-end; Windows `cmd` shown — see the env-var note
 *Command reference*):
 
 ```cmd
-REM 1. collect a fresh batch that carries m_t (pass the path to --trace explicitly)
+REM 1. collect a batch that carries m_t (pass the path to --trace explicitly).
+REM    Use ONE traces file and reuse it below — here data\traces.jsonl.
 set SENTIANCE_COGNITION_BACKEND=ollama
-python -m sentiance society --trace data\traces_fused.jsonl
-python -m sentiance live --as Iris --trace data\traces_fused.jsonl
-python -m sentiance chat --preset --as Rhea --trace data\traces_fused.jsonl
+python -m sentiance society --trace data\traces.jsonl
+python -m sentiance live --as Iris --trace data\traces.jsonl
+python -m sentiance chat --preset --as Rhea --trace data\traces.jsonl
 
 REM 2. (optional) confirm the traces carry state_vec — want a nonzero count
-python -c "import json;r=[json.loads(l) for l in open('data/traces_fused.jsonl',encoding='utf-8') if l.strip()];print('rows',len(r),'with state_vec',sum('state_vec' in x for x in r))"
+python -c "import json;r=[json.loads(l) for l in open('data/traces.jsonl',encoding='utf-8') if l.strip()];print('rows',len(r),'with state_vec',sum('state_vec' in x for x in r))"
 
-REM 3. build the fused dataset (keeps m_t; --fused drops any old rows without it)
-python scripts\prepare_data.py --traces data\traces_fused.jsonl --out data\fused --fused
+REM 3. build the fused dataset — state-blind by default (m_t is the only state channel).
+REM    --fused keeps only the state_vec rows; prints "dataset: fused (m_t only)".
+python scripts\prepare_data.py --traces data\traces.jsonl --out data\fused --fused
 
-REM 4. train the fused mind (LoRA + state encoder, end-to-end) — prints device: cuda
+REM 4. train the fused mind (LoRA + state encoder, end-to-end).
+REM    Prints "device: cuda ... n_prefix: 16  mode: state-blind (m_t only)".
 python scripts\finetune_fused.py --train data\fused\train.jsonl --out models\sentiance-fused --epochs 4
 
-REM 5. use it — she now thinks *through* her own cognitive state
+REM 5. measure whether m_t actually steers her (see the ablation section below)
+python scripts\eval_fused.py --model models\sentiance-fused
+
+REM 6. use it — she now thinks *through* her own cognitive state
 set SENTIANCE_COGNITION_BACKEND=fused
 python -m sentiance chat
 ```
 
-Already have a `data\traces.jsonl` with some fresh rows in it? Point step 3 at it
-directly — `--fused` keeps only the `state_vec`-carrying rows. A healthy run prints
-`examples: N (of N rows; dropped 0)` at step 4; if it says *"empty after
-tokenizing"* or *"wrong dim"*, your traces predate `state_vec` — collect fresh ones.
+Point step 3 at **whatever traces file you actually collected** (the `--trace` path
+from step 1). `--fused` keeps only the `state_vec`-carrying rows, so a mixed file is
+fine. A healthy step 4 prints `examples: N (of N rows; dropped 0)`; *"empty after
+tokenizing"* / *"wrong dim"* means those traces predate `state_vec` — collect fresh.
+
+**The ablation control (for a paper).** Build the *state-in-prompt* version — the
+redundant baseline where the vector gets ignored — and eval it too; the contrast is
+the result:
+
+```cmd
+python scripts\prepare_data.py --traces data\traces.jsonl --out data\fused_control --fused --state-in-prompt
+python scripts\finetune_fused.py --train data\fused_control\train.jsonl --out models\sentiance-fused-control --epochs 4 --state-in-prompt
+python scripts\eval_fused.py --model models\sentiance-fused-control
+```
 
 The `fused` backend loads the base + LoRA + the trained encoder and conditions
 each thought on the **live** `m_t`; like every backend it **degrades to the
