@@ -45,21 +45,27 @@ echo   model out        : %MODEL%   (epochs %EPOCHS%, n_prefix %NPREFIX%)
 echo(
 
 set "SENTIANCE_COGNITION_BACKEND=%BACKEND%"
-set "SENTIANCE_TRACE_PATH=%TRACES%"
 
 REM ---------------------------------------------------------------------------
 echo [1/4] Collecting fresh traces (each run appends to %TRACES%)...
+echo   (pass the path explicitly to --trace; a bare --trace defaults to data\traces.jsonl)
 echo(
-python -m sentiance society --trace
-python -m sentiance society --trace
-python -m sentiance live --as Iris --trace
-python -m sentiance live --as Milo --trace
-python -m sentiance live --as Cass --trace
-python -m sentiance chat --preset --as Rhea --trace
+python -m sentiance society --trace "%TRACES%"
+python -m sentiance society --trace "%TRACES%"
+python -m sentiance live --as Iris --trace "%TRACES%"
+python -m sentiance live --as Milo --trace "%TRACES%"
+python -m sentiance live --as Cass --trace "%TRACES%"
+python -m sentiance chat --preset --as Rhea --trace "%TRACES%"
 
 REM ---------------------------------------------------------------------------
 echo(
 echo [2/4] Checking the traces carry m_t (state_vec)...
+if not exist "%TRACES%" (
+  echo(
+  echo   ERROR: %TRACES% was not created — the collection runs wrote no traces.
+  echo          Is the collection backend working? Try:  set BACKEND=simulated
+  goto :fail
+)
 python -c "import json;r=[json.loads(l) for l in open(r'%TRACES%',encoding='utf-8') if l.strip()];n=sum('state_vec' in x for x in r);print('  rows',len(r),' with state_vec',n);import sys;sys.exit(0 if n>0 else 1)"
 if errorlevel 1 (
   echo(
