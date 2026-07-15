@@ -55,6 +55,11 @@ def main() -> None:
     bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
     print(f"device: {'cuda' if torch.cuda.is_available() else 'cpu'}  "
           f"dtype: {'bf16' if bf16 else 'fp16/fp32'}  qlora: {args.qlora}")
+    if not torch.cuda.is_available():
+        print("  ⚠ no CUDA GPU detected — this torch is CPU-only, so training will be "
+              "slow.\n    Install a CUDA build to use your card: pick your CUDA version at "
+              "https://pytorch.org/get-started/locally/\n    (e.g. pip install torch "
+              "--index-url https://download.pytorch.org/whl/cu121). Continuing on CPU…")
 
     tokenizer = AutoTokenizer.from_pretrained(args.base)
     if tokenizer.pad_token is None:
@@ -93,34 +98,45 @@ def main() -> None:
                         "gate_proj", "up_proj", "down_proj"],
     )
 
-    cfg = SFTConfig(
-        output_dir=args.out,
-        num_train_epochs=args.epochs,
-        per_device_train_batch_size=args.batch,
-        gradient_accumulation_steps=args.accum,
-        learning_rate=args.lr,
-        lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
-        logging_steps=10,
-        save_strategy="epoch",
-        bf16=bf16,
-        fp16=not bf16 and torch.cuda.is_available(),
-        gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False},
-        optim="paged_adamw_8bit" if args.qlora else "adamw_torch",
-        max_seq_length=args.maxlen,
-        dataset_text_field="text",
-        packing=False,
-        report_to="none",
-    )
+    # trl's API drifts between versions — build kwargs, then keep only the ones
+    # this installed version accepts (and handle two known renames), so the same
+    # script runs across trl releases.
+    import inspect  # noqa: PLC0415
 
+    cfg_params = inspect.signature(SFTConfig.__init__).parameters
+    cfg_kwargs: dict = {
+        "output_dir": args.out,
+        "num_train_epochs": args.epochs,
+        "per_device_train_batch_size": args.batch,
+        "gradient_accumulation_steps": args.accum,
+        "learning_rate": args.lr,
+        "lr_scheduler_type": "cosine",
+        "warmup_ratio": 0.03,
+        "logging_steps": 10,
+        "save_strategy": "epoch",
+        "bf16": bf16,
+        "fp16": not bf16 and torch.cuda.is_available(),
+        "gradient_checkpointing": True,
+        "gradient_checkpointing_kwargs": {"use_reentrant": False},
+        "optim": "paged_adamw_8bit" if args.qlora else "adamw_torch",
+        "dataset_text_field": "text",
+        "packing": False,
+        "report_to": "none",
+    }
+    # sequence length was renamed max_seq_length → max_length in newer trl
+    cfg_kwargs["max_seq_length" if "max_seq_length" in cfg_params else "max_length"] = args.maxlen
+    cfg = SFTConfig(**{k: v for k, v in cfg_kwargs.items() if k in cfg_params})
+
+    # SFTTrainer renamed tokenizer → processing_class in newer trl
+    trainer_params = inspect.signature(SFTTrainer.__init__).parameters
+    tok_kwarg = "processing_class" if "processing_class" in trainer_params else "tokenizer"
     trainer = SFTTrainer(
         model=model,
         args=cfg,
         train_dataset=ds["train"],
         eval_dataset=ds.get("validation"),
         peft_config=lora,
-        tokenizer=tokenizer,
+        **{tok_kwarg: tokenizer},
     )
     trainer.train()
     trainer.save_model(args.out)  # saves the LoRA adapter
