@@ -44,6 +44,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--n-prefix", type=int, default=16, help="soft state-tokens prepended")
     ap.add_argument("--enc-hidden", type=int, default=256, help="state-encoder hidden width")
     ap.add_argument("--log-every", type=int, default=10)
+    ap.add_argument("--seed", type=int, default=0,
+                    help="random seed (vary it to test robustness across runs)")
     ap.add_argument("--state-in-prompt", action="store_true",
                     help="record that this run's data keeps the state in the prompt "
                          "(the control); default marks it state-blind (m_t only). "
@@ -72,7 +74,10 @@ def main() -> None:
         save_config,
     )
 
+    torch.manual_seed(args.seed)  # reproducible; vary --seed to test robustness
     on_cuda = torch.cuda.is_available()
+    if on_cuda:
+        torch.cuda.manual_seed_all(args.seed)
     bf16 = on_cuda and torch.cuda.is_bf16_supported()
     device = "cuda" if on_cuda else "cpu"
     autocast_dtype = torch.bfloat16 if bf16 else torch.float16

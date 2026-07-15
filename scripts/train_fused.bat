@@ -52,19 +52,22 @@ echo [1/5] Collecting a large, varied batch of traces (appends to %TRACES%)...
 echo   (weighted toward solo 'live' across many natures for diversity; a bare
 echo    --trace would default to data\traces.jsonl, so the path is passed explicitly)
 echo(
-REM — solo lives across many distinct natures (the bulk; least repetitive,
-REM   each mind explores its own world, so states span the whole range) —
-for %%N in (Iris Milo Rhea Cass Aria Nova Sol Wren Juno Bram) do (
-  echo   live --as %%N
-  python -m sentiance live --as %%N --trace "%TRACES%"
-)
-REM — a couple of society runs for social/relational states (meet, bond, part) —
-python -m sentiance society --trace "%TRACES%"
-python -m sentiance society --trace "%TRACES%"
-REM — preset chats across natures for the full emotional sweep + varied people —
-for %%N in (Iris Cass Rhea Milo) do (
+REM — preset chats are the RICHEST affective source: each sweeps the full range
+REM   (warmth -> fear -> anger -> loss -> grief -> hope -> dread), and different
+REM   natures colour the SAME situations differently, so m_t spans valence widely.
+REM   This is what the encoder needs — affective spread, not just character variety.
+for %%N in (Cass Milo Rhea Iris Aria Cass Milo Rhea Iris) do (
   echo   chat --preset --as %%N
   python -m sentiance chat --preset --as %%N --trace "%TRACES%"
+)
+REM — society for bonds forming and parting (attachment -> loss -> grief) —
+python -m sentiance society --trace "%TRACES%"
+python -m sentiance society --trace "%TRACES%"
+python -m sentiance society --trace "%TRACES%"
+REM — a few solo lives (anxious natures, so exploration isn't only sunny) —
+for %%N in (Cass Milo) do (
+  echo   live --as %%N
+  python -m sentiance live --as %%N --trace "%TRACES%"
 )
 
 REM ---------------------------------------------------------------------------
