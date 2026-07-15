@@ -152,6 +152,7 @@ python scripts\prepare_data.py --traces data\traces_fused.jsonl --out data\fused
 python scripts\finetune_fused.py --train data\fused\train.jsonl --out models\sentiance-fused --epochs 4
 set SENTIANCE_COGNITION_BACKEND=fused
 python -m sentiance chat
+python scripts\eval_fused.py --model models\sentiance-fused   REM ablation: does m_t steer her?
 ```
 Useful flags for `finetune_fused.py`: `--n-prefix 16` (stronger conditioning),
 `--epochs`, `--base`. (Fresh traces required — old ones predate `state_vec`.)
@@ -749,6 +750,21 @@ with a learned cognition harness* — the honest, laptop-scale hybrid, and the
 on-ramp to replacing individual Python faculties with small learned nets that feed
 the same conditioning bus.
 
+**Does `m_t` actually steer her?** In `chat`, state reaches the model *two* ways —
+as text in the prompt *and* as the `m_t` vector — so a chat alone can't tell them
+apart. To isolate the vector, run the ablation:
+
+```cmd
+python scripts\eval_fused.py --model models\sentiance-fused
+```
+
+It holds the prompt identical and generates **greedily** with the real `m_t` vs. a
+zeroed `m_t` (plus a cross-state swap). If the outputs differ on most probes, the
+state encoder learned to steer generation — the hybrid is doing something the
+prompt text can't. If they're mostly identical, `m_t` isn't contributing yet (train
+longer, raise `--n-prefix`, or collect more varied data). It's a measurement, not a
+vibe.
+
 > **Still functional correlates only (ADR 0002).** Putting the state inside the
 > forward pass buys *integration and end-to-end learnability*, not phenomenal
 > experience. A valence computed as a tensor is no more felt than one computed in
@@ -975,8 +991,8 @@ while the architecture stays transparent and inspectable.
   in the house, not scripted movement).
 - Deeper society — minds that quote each other across time, a shared event (a
   storm) they weather together, softening the anxious-bond asymmetry.
-- An evaluation harness comparing the `finetuned` and `fused` voices against
-  qwen/Claude.
+- A fuller evaluation harness comparing the `finetuned` and `fused` voices against
+  qwen/Claude (the `m_t` ablation — `scripts/eval_fused.py` — is the first piece).
 
 Throughout: **functional correlates, never a claim of phenomenal consciousness**
 ([ADR-0002](docs/adr/0002-functional-not-phenomenal.md)).
