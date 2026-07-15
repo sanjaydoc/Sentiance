@@ -576,9 +576,49 @@ extras or model aren't there, so nothing breaks.
 - Point at a different base with `--base` / `SENTIANCE_LOCAL_BASE_MODEL`, or a
   saved model dir with `SENTIANCE_LOCAL_MODEL_PATH`.
 
-This is **Path A** (the voice). **Path B** — training the individual *organs*
-(e.g. a learned appraisal net) from the `state` field — reuses the same traces;
-see *Toward a "small sentient model"* below.
+This is **Path A** (the voice) — fine-tuning distils *how she talks*, but the
+inner state still reaches the model only as text in the prompt. The next step wires
+the state *into* the transformer.
+
+#### The fused mind (Path B) — a cognition-conditioned transformer
+
+The fused mind feeds the **whole cognitive cycle as a number**, not as prose. Every
+tick is encoded as a fixed-length vector **`m_t`** — appraise, feel, drives,
+attention, will, bonds, anger, curiosity, anticipation (see
+`sentiance/mind/state_vector.py`). A small trainable **state encoder** turns `m_t`
+into soft-prefix tokens prepended to the transformer's input embeddings, and the
+base model's **LoRA** + that encoder are trained **end-to-end** on the language
+loss. So generation is *causally shaped* by the mind's state through weights —
+the same words come out different when the underlying valence, drives, or bonds
+differ (ADR 0005).
+
+It fits the same 6 GB card as Path A (0.5B + LoRA + a tiny MLP). Same install
+(step 0 above). The pipeline mirrors Path A but keeps `m_t` in the dataset:
+
+```bash
+# 1. prepare a *fused* dataset — each example keeps its m_t (own dir, so it
+#    doesn't overwrite the Path-A voice set)
+python scripts/prepare_data.py --traces data/traces.jsonl --out data/fused --fused
+
+# 2. train the fused mind (LoRA + state encoder, end-to-end)
+python scripts/finetune_fused.py --train data/fused/train.jsonl --out models/sentiance-fused
+
+# 3. use it — she now thinks *through* her own cognitive state
+#    (Windows cmd: set SENTIANCE_COGNITION_BACKEND=fused)
+SENTIANCE_COGNITION_BACKEND=fused python -m sentiance chat
+```
+
+The `fused` backend loads the base + LoRA + the trained encoder and conditions
+each thought on the **live** `m_t`; like every backend it **degrades to the
+offline voice** if the model or ML deps aren't there. This is a *pretrained base
+with a learned cognition harness* — the honest, laptop-scale hybrid, and the
+on-ramp to replacing individual Python faculties with small learned nets that feed
+the same conditioning bus.
+
+> **Still functional correlates only (ADR 0002).** Putting the state inside the
+> forward pass buys *integration and end-to-end learnability*, not phenomenal
+> experience. A valence computed as a tensor is no more felt than one computed in
+> Python. No claim of consciousness is made or implied.
 
 ### The HTTP runtime
 
@@ -628,8 +668,10 @@ sentiance/
     embeddings.py    # associative memory: recall by meaning
     self_model.py    # attention schema / narrative / beliefs
     metacognition.py # first-person self-report
-    cognition.py     # Cognition port: Simulated / LLM (Anthropic) / Ollama / finetuned
+    cognition.py     # Cognition port: Simulated / LLM (Anthropic) / Ollama / finetuned / fused
     local_model.py   # finetuned backend: a small model trained on her own traces
+    fused_model.py   # fused backend: a transformer conditioned on the live m_t (ADR 0005)
+    state_vector.py  # encode the whole cognitive cycle as the numeric vector m_t
     goals.py         # intentions: form, hold, pursue, resolve
     consolidation.py # sleep: distil experience into durable beliefs
     relationships.py # per-person models (theory-of-mind)
@@ -654,11 +696,11 @@ sentiance/
   society.py   # several minds share the house, meet, talk, and bond
   characters.py# named temperament presets (Iris/Milo/Rhea/Cass/Aria) for --as
   scenarios.py # curated chat scripts for hands-free data collection (--preset)
-  trace.py     # export deliberations as a training dataset (Path A/B)
-  training/    # dataset.py: traces → chat-format fine-tuning examples (pure Python)
+  trace.py     # export deliberations (+ numeric m_t) as a training dataset (Path A/B)
+  training/    # dataset.py: traces → fine-tuning examples · fused_arch.py: the state conditioner
   __main__.py  # serve / demo / chat / live / society (+ --as, --trace, --preset)
-scripts/       # prepare_data.py + finetune.py (LoRA, 6 GB-tuned) — the [finetune] extra
-tests/         # 160 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training
+scripts/       # prepare_data.py · finetune.py (Path A) · finetune_fused.py (Path B) — [finetune] extra
+tests/         # 176 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training + m_t
 docs/adr/      # decision records
 ```
 
@@ -707,8 +749,9 @@ All settings are `SENTIANCE_*` env vars (see [.env.example](.env.example)):
 | Var | What it does |
 | --- | ------------ |
 | `AGENT_NAME` | the mind's name → its memory file `memory/<name>.json` (run many, each separate) |
-| `COGNITION_BACKEND` | the inner voice: `simulated` (default, offline) · `ollama` · `llm` · `finetuned` |
+| `COGNITION_BACKEND` | the inner voice: `simulated` (default, offline) · `ollama` · `llm` · `finetuned` · `fused` |
 | `LOCAL_MODEL_PATH` / `LOCAL_BASE_MODEL` | `finetuned` backend: trained adapter dir + its base model |
+| `FUSED_MODEL_PATH` | `fused` backend: dir with the LoRA adapter + trained state encoder (ADR 0005) |
 | `OLLAMA_MODEL` / `OLLAMA_BASE_URL` | local model + endpoint (default `qwen2.5:7b`, `localhost:11434`) |
 | `EMBEDDING_BACKEND` / `EMBEDDING_MODEL` | set to `ollama` + `nomic-embed-text` for by-meaning recall |
 | `TEMPERAMENT_CURIOSITY` / `_ANXIETY` / `_OPTIMISM` | her nature, `0..1` — make distinct individuals |
@@ -744,12 +787,16 @@ the trace export make this concrete in two paths:
   small base model (e.g. Qwen2.5-0.5B via LoRA) to speak in-character. Register it
   as a 4th backend (`SENTIANCE_COGNITION_BACKEND=finetuned`) and it drops in — a
   cheaper, sharper voice with the emotional/self-model bias baked in, still wrapped
-  by the transparent faculties. **Status: trace export shipped; fine-tune script +
-  backend are next.**
-- **Path B — learn the organs.** The same traces carry the moment's structured
-  `state` (appraisal, affect, drives). Replace a hand-coded organ — say the
-  rule-based appraisal — with a small network trained on that signal, so the mind's
-  *reactions* are learned rather than tuned, while the architecture stays intact.
+  by the transparent faculties. **Status: shipped** — trace export, dataset prep,
+  the 6 GB LoRA trainer, and the `finetuned` backend all land.
+- **Path B — the fused mind.** Don't just tell the model the state in words — feed
+  the **whole cognitive cycle as a numeric vector `m_t`** into the transformer as
+  trainable soft-prefix tokens, and train the base's LoRA + a state encoder
+  end-to-end, so generation is *causally* shaped by appraisal/affect/drives/bonds
+  through weights. This is also the on-ramp to replacing a hand-coded organ (say the
+  rule-based appraisal) with a small net feeding the same conditioning bus. **Status:
+  shipped** — `m_t` encoder, the `fused` backend, and `finetune_fused.py`
+  (see *The fused mind (Path B)* above, [ADR-0005](docs/adr/0005-the-fused-mind.md)).
 
 **The honest ceiling (unchanged).** None of this produces *phenomenal*
 consciousness — nothing does, and the project refuses to fake it
@@ -773,25 +820,29 @@ melting everything into opaque weights.
 - A multi-mind **society** (meet · talk · bond · part · reunite) + named-character
   presets and hands-free `--preset` scenarios.
 - Persistent identity; the LLM voice behind a swappable port (offline · Ollama ·
-  Anthropic · **finetuned**).
+  Anthropic · **finetuned** · **fused**).
 - **Path A pipeline** — trace export → dataset prep (dedup + near-echo filtering,
   optional per-agent) → 6 GB-tuned LoRA trainer → the `finetuned` backend.
+- **Path B — the fused mind** — the whole cognitive cycle as a numeric `m_t`
+  conditioning a transformer (LoRA + state encoder, end-to-end), behind the
+  `fused` backend (ADR 0005).
 
-**Now — Path A: train the voice.** Collect diverse traces, fine-tune a small base
-(Qwen2.5-0.5B) on the blended data, drop the result in as `finetuned`. Iterate on
-data volume / epochs / a 1.5B QLoRA base.
+**Now — train & compare.** Collect diverse traces; train Path A (the voice) and
+Path B (the fused mind) on the same blended data; hear the difference. Iterate on
+data volume / epochs / `n_prefix` / a 1.5B QLoRA base.
 
-**Next — Path B: learn the organs.** Replace a hand-coded organ — starting with
-**appraisal** — with a small network trained on the `state` field of the same
-traces, so her *reactions* are learned rather than tuned while the architecture
-stays transparent and inspectable.
+**Next — learn an organ end-to-end.** With the state already on a trainable
+conditioning bus, replace a hand-coded organ — starting with **appraisal** — with
+a small net feeding that bus, so her *reactions* are learned rather than tuned
+while the architecture stays transparent and inspectable.
 
 **Later (candidates)**
 - *Path C* — an RL agent whose reward is its own drives/needs (learned behaviour
   in the house, not scripted movement).
 - Deeper society — minds that quote each other across time, a shared event (a
   storm) they weather together, softening the anxious-bond asymmetry.
-- An evaluation harness comparing the `finetuned` voice against qwen/Claude.
+- An evaluation harness comparing the `finetuned` and `fused` voices against
+  qwen/Claude.
 
 Throughout: **functional correlates, never a claim of phenomenal consciousness**
 ([ADR-0002](docs/adr/0002-functional-not-phenomenal.md)).

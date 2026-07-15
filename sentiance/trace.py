@@ -4,13 +4,16 @@ Set ``SENTIANCE_TRACE_PATH=data/traces.jsonl`` and every deliberation the mind
 makes — in ``demo``, ``chat``, ``live``, or ``society`` — is appended as one JSON
 line capturing exactly what the cognition saw and what it produced:
 
-    {"agent", "system", "prompt", "thought", "state": {emotion, valence, arousal,
-     drives, goals, heard, source, focus}}
+    {"agent", "system", "prompt", "thought",
+     "state": {emotion, valence, arousal, drives, goals, heard, signals, source, focus},
+     "state_vec": [...]}
 
 - ``prompt`` / ``thought`` are a ready **supervised (input → output) pair** for
   fine-tuning a small model to speak in-character (Path A — the voice).
-- ``state`` is the structured inner context of that same moment — the signal for
-  training the individual *organs* later (Path B — e.g. a learned appraisal net).
+- ``state`` is the human-readable inner context of that same moment.
+- ``state_vec`` is the whole cognitive cycle as a fixed-length numeric vector
+  ``m_t`` (``state_vector.encode_state``) — the differentiable input the **fused**
+  mind trains on (Path B — a cognition-conditioned transformer, ADR 0005).
 
 Nothing changes about how the mind runs; tracing is a transparent wrapper around
 the ``Cognition`` port (ADR-0003), so the model call is captured without touching
