@@ -58,9 +58,18 @@ The honest contribution is the **method + the ablation**, on consumer hardware:
 - **Framing:** "A functional cognitive architecture conditioning a small language
   model" — *not* machine sentience. Position against affect/control-conditioned
   generation and cognitive-architecture+LLM work (SOAR/ACT-R/LIDA integrations).
-- **Headline result:** state-as-vector conditions the model (`r ≈ 0.89`, p ≈ 0.006,
-  dose-response slope ≈ 0.52); the state-in-prompt control does not (`r ≈ 0`). The
-  redundancy finding is the interesting part.
+- **Headline result (state it honestly):** a cognitive-state vector conditions the
+  LM's affect **congruently** (mean `r ≈ 0.4` across seeds, best seeds `r ≈ 0.8` at
+  p < 0.01), *only* when the state is removed from the prompt (state-blind); the
+  state-in-prompt control and a shuffled-vector control both give `r ≈ 0`. The effect
+  is **directional but noisy / data-scale-limited** — ~1 seed in 3 fails — **not**
+  reliably robust. Say this plainly; it's still a real, novel finding.
+- **Two clean ablations to lead with:**
+  1. *state-as-vector vs state-as-text* — the vector conditions; the redundant text
+     does not (the model ignores the vector when the prompt already says the state).
+  2. *prefix vs FiLM* — deep (per-layer) injection amplifies the state's influence
+     ~25× (KL) but does **not** improve reliability; the bottleneck is data, not
+     conditioning depth (a useful negative result).
 - **Before submitting, strengthen** beyond the current proof-of-concept:
   - more/varied data (more solo `live`, more distinct people; reduce repetition),
   - multiple seeds + report mean ± CI,

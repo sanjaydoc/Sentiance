@@ -51,33 +51,44 @@ SENTIANCE_COGNITION_BACKEND=fused python -m sentiance chat
 
 Measured with `scripts/eval_fused.py` (deterministic ablation over a 12-state
 battery spanning valence −0.80…+0.85; prompt held identical, only the vector
-changed). **Representative run (234 blended training examples, `n_prefix=16`):**
+changed) on a **12-state battery** spanning valence −0.80…+0.85. 234 blended training
+examples.
 
-| metric | fused (state-blind) | control (state-in-prompt) |
-| --- | --- | --- |
-| affect congruence `r(valence, ΔAffect)` | **+0.89** (p = 0.006, 11/12) | ≈ 0 |
-| cross-state dose-response slope | **+0.52** (r = +0.89) | — |
-| prediction shift `KL(real‖zero)` | 0.007 (subtle, *directed*) | — |
+**The effect is real but *data-scale-limited* — report it as a distribution, not a
+single number.** Across training seeds (3-seed sweeps):
 
-**Interpretation.** The vector moves output affect **congruently** with the state,
-significantly and dose-dependently, while a **shuffled** `m_t` gives `r ≈ 0`. When the
-state is instead left in the prompt text (the control), the model **ignores** the
-vector (`r ≈ 0`) — the redundancy removes any pressure to learn it. So the headline
-result is an **ablation**: *state-as-vector conditions the model; state-as-text does
-not.* Reproduce with the commands in the repo README.
+| conditioning | per-seed `r(valence, ΔAffect)` | mean ± std | strong (r≥0.5, p≤0.05) | mean `KL(real‖zero)` |
+| --- | --- | --- | --- | --- |
+| **prefix** (soft tokens) | +0.82, +0.74, −0.46 | **+0.37 ± 0.59** | 2/3 | 0.004 |
+| **FiLM** (per-layer γ/β) | +0.83, −0.26, +0.63 | **+0.40 ± 0.47** | 2/3 | **0.10** |
 
-Numbers vary run to run and with data volume; regenerate `eval/fused_eval.md` for
-your own checkpoint.
+The **best seeds are strong and significant** (r ≈ 0.8, permutation p ≈ 0.001–0.003,
+dose-response slope > 0), but **~1 seed in 3 fails** and the variance is large — so
+the honest summary is *directional but noisy*, limited by the small dataset, not
+robust.
+
+**Two controls both give `r ≈ 0`:** a *shuffled* `m_t` (structure destroyed), and the
+*state-in-prompt* model (state left in the words, so the vector is redundant and
+ignored). So the core claim holds as an **ablation**: *state-as-vector conditions the
+model; state-as-text does not.*
+
+**prefix vs FiLM (a negative result worth reporting):** injecting `m_t` deep (FiLM,
+into every layer) makes its influence on the distribution **~25× larger** (KL 0.10 vs
+0.004) but does **not** improve seed-to-seed reliability — both are noisy at this data
+scale. The bottleneck is **data, not conditioning depth.**
+
+Regenerate the numbers for any checkpoint with `scripts/eval_fused.py` (single) or
+`scripts/robustness_fused.py` (across seeds).
 
 ## Limitations
 
+- **Directional but noisy.** Mean congruence `r ≈ 0.4` across seeds with large std;
+  ~1 seed in 3 does not learn the mapping. Not yet seed-robust — needs more data.
 - **Small & blended.** ~234 self-generated examples across several characters; the
-  voice is repetitive and the effect, while significant, is modest in magnitude.
+  voice is repetitive.
 - **0.5B base**, English only, short first-person thoughts — not general text.
 - **Self-generated data.** Traces come from Sentiance's own (partly rule-based)
   cognitive cycle, so the model learns *that* system's regularities, not the world's.
-- **Distribution shift is subtle.** `m_t` nudges the next-token distribution in a
-  targeted direction rather than dominating it.
 - **Functional only.** Nothing here evidences subjective experience.
 
 ## Training data & reproducibility

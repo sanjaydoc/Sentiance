@@ -809,7 +809,11 @@ Holding the prompt identical and changing only the conditioning vector, it repor
    states; the **slope** of output-affect on borrowed valence.
 
 It writes a markdown report to `eval/fused_eval.md` and prints a verdict keyed on
-**congruence** (`r` + permutation test + dose-response), not raw KL.
+**congruence** (`r` + permutation test + dose-response), not raw KL. On this
+234-example dataset the effect is **directional but noisy**: best seeds reach
+`r ≈ 0.8` (permutation p ≈ 0.001–0.003) while ~1 seed in 3 fails — mean `r ≈ 0.4`
+across seeds. Both controls (shuffled `m_t`; state-in-prompt) give `r ≈ 0`. See
+[`MODEL_CARD.md`](MODEL_CARD.md) for the full multi-seed table and the honest read.
 
 **One number isn't enough — measure robustness.** A single state-blind run can give
 `r ≈ +0.89` *or* `r ≈ −0.29` on similar data: the zero-initialised encoder either
