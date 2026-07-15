@@ -30,6 +30,25 @@ faculties causally shape generation through weights, not prompt text. All of it
 fits a 6 GB laptop GPU. See *[Toward a "small sentient model"](#toward-a-small-sentient-model)*
 and *[The fused mind (Path B)](#the-fused-mind-path-b--a-cognition-conditioned-transformer)*.
 
+## Released on Hugging Face 🤗
+
+A trained fused mind and its training traces are public:
+
+- **Model — [`CryptoGod97/sentiance-film`](https://huggingface.co/CryptoGod97/sentiance-film)**
+  — Qwen2.5-0.5B + LoRA + a FiLM state encoder that conditions generation on the
+  live `m_t`. Needs this runtime to run (the adapter alone is just a Qwen fine-tune).
+- **Dataset — [`CryptoGod97/sentiance-traces`](https://huggingface.co/datasets/CryptoGod97/sentiance-traces)**
+  — self-labeled deliberation traces (prompt → thought + numeric state).
+
+**Honest result** (measured with `scripts/eval_fused.py` + `robustness_fused.py`):
+the state vector conditions the model's affect *congruently* — best seeds `r ≈ 0.8`
+(permutation p < 0.01), while both controls (shuffled `m_t`; state-in-prompt) give
+`r ≈ 0`. Across seeds the effect is **directional but noisy** (mean `r ≈ 0.4`, ~1 in
+3 seeds fails) — real but data-scale-limited. Deep **FiLM** conditioning amplifies the
+state's influence ~25× over a shallow prefix but doesn't fix reliability — the
+bottleneck is data, not depth. Full write-up: [`MODEL_CARD.md`](MODEL_CARD.md) ·
+[`PUBLISHING.md`](PUBLISHING.md). Created by **Dr. Sanjay Anbu**.
+
 ## Grounding
 
 Each faculty implements a role from a theory of mind:
@@ -919,9 +938,12 @@ sentiance/
   trace.py     # export deliberations (+ numeric m_t) as a training dataset (Path A/B)
   training/    # dataset.py: traces → fine-tuning examples · fused_arch.py: the state conditioner
   __main__.py  # serve / demo / chat / live / society (+ --as, --trace, --preset)
-scripts/       # prepare_data.py · finetune.py (Path A) · finetune_fused.py (Path B) — [finetune] extra
-tests/         # 176 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training + m_t
+scripts/       # prepare_data · finetune (Path A) · finetune_fused (Path B: prefix|film) ·
+               #   eval_fused (ablation) · robustness_fused (seed sweep) — [finetune] extra
+tests/         # 181 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training + m_t
 docs/adr/      # decision records
+MODEL_CARD.md  # Hugging Face model card (honest results, author, license)
+PUBLISHING.md  # how to publish to HF · Ollama caveat · academic framing
 ```
 
 ## The LLM-backed inner voice
@@ -1093,11 +1115,25 @@ melting everything into opaque weights.
   optional per-agent) → 6 GB-tuned LoRA trainer → the `finetuned` backend.
 - **Path B — the fused mind** — the whole cognitive cycle as a numeric `m_t`
   conditioning a transformer (LoRA + state encoder, end-to-end), behind the
-  `fused` backend (ADR 0005).
+  `fused` backend, with **two conditioning paths** — `prefix` (soft tokens) and
+  **`film`** (per-layer γ/β modulation of every decoder block) (ADR 0005).
+- **Evaluation & robustness** — `scripts/eval_fused.py` (deterministic ablation:
+  KL shift, affect-congruence `r` + permutation test, cross-state dose-response,
+  shuffled + state-in-prompt controls) and `scripts/robustness_fused.py`
+  (the `r` distribution across seeds).
+- **Public release** — a trained fused mind
+  ([`sentiance-film`](https://huggingface.co/CryptoGod97/sentiance-film)) and its
+  traces ([`sentiance-traces`](https://huggingface.co/datasets/CryptoGod97/sentiance-traces))
+  on Hugging Face, with an honest [`MODEL_CARD.md`](MODEL_CARD.md).
 
-**Now — train & compare.** Collect diverse traces; train Path A (the voice) and
-Path B (the fused mind) on the same blended data; hear the difference. Iterate on
-data volume / epochs / `n_prefix` / a 1.5B QLoRA base.
+**Result so far — honest.** State-as-vector conditions the model's affect (best
+seeds `r ≈ 0.8`, p < 0.01; controls ≈ 0) but the effect is **directional but noisy**
+across seeds (mean `r ≈ 0.4`; ~1 in 3 fails) — real, novel, *data-scale-limited*.
+
+**Now — make it robust.** The measured bottleneck is data, not conditioning depth:
+collect a larger affect-rich batch and re-run the seed sweep; if the failing seed
+disappears, the claim upgrades from "directional but noisy" to "robust with error
+bars." Also on deck: iterate on epochs / `n_prefix` / a 1.5B QLoRA base.
 
 **Next — learn an organ end-to-end.** With the state already on a trainable
 conditioning bus, replace a hand-coded organ — starting with **appraisal** — with
@@ -1110,7 +1146,7 @@ while the architecture stays transparent and inspectable.
 - Deeper society — minds that quote each other across time, a shared event (a
   storm) they weather together, softening the anxious-bond asymmetry.
 - A fuller evaluation harness comparing the `finetuned` and `fused` voices against
-  qwen/Claude (the `m_t` ablation — `scripts/eval_fused.py` — is the first piece).
+  qwen/Claude.
 
 Throughout: **functional correlates, never a claim of phenomenal consciousness**
 ([ADR-0002](docs/adr/0002-functional-not-phenomenal.md)).
