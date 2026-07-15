@@ -47,6 +47,7 @@ def parse_args() -> argparse.Namespace:
                     help="permutation-test iterations for the congruence p-value")
     ap.add_argument("--control-seeds", type=int, default=5,
                     help="shuffled-m_t control repeats (report mean ± std of its r)")
+    ap.add_argument("--json", default=None, help="also write the metrics as JSON here")
     return ap.parse_args()
 
 
@@ -393,6 +394,27 @@ def main() -> None:
               "vector's influence on generation, not phenomenal experience._", ""]
     out.write_text("\n".join(lines), encoding="utf-8")
     print(f"\nWrote report to {out}")
+
+    if args.json:
+        import json  # noqa: PLC0415
+
+        jp = Path(args.json)
+        jp.parent.mkdir(parents=True, exist_ok=True)
+        jp.write_text(json.dumps({
+            "model": args.model,
+            "n_prefix": cfg["n_prefix"],
+            "r_real": round(r_real, 4),
+            "r_ctrl": round(r_ctrl, 4),
+            "r_ctrl_sd": round(r_ctrl_sd, 4),
+            "p_perm": round(p_perm, 5),
+            "p_sign": round(p_sign, 5),
+            "dose_slope": round(dose_slope, 4),
+            "dose_r": round(dose_r, 4),
+            "kl_real": round(_mean(kl_real), 5),
+            "kl_ctrl": round(_mean(kl_ctrl), 5),
+            "verdict": verdict,
+        }, indent=2), encoding="utf-8")
+        print(f"Wrote metrics JSON to {jp}")
 
 
 if __name__ == "__main__":

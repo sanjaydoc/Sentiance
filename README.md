@@ -799,11 +799,22 @@ Holding the prompt identical and changing only the conditioning vector, it repor
    states; the **slope** of output-affect on borrowed valence.
 
 It writes a markdown report to `eval/fused_eval.md` and prints a verdict keyed on
-**congruence** (`r` + sign-test + dose-response), not raw KL. A representative
-state-blind run reaches **`r ≈ +0.89` (p ≈ 0.006), dose slope ≈ +0.52**, while the
-shuffled control and the state-in-prompt model both give `r ≈ 0` — i.e. *the vector,
-and only the vector, steers her affect.* A weak result means train longer, raise
-`--n-prefix`, or collect more varied data — it's a measurement, not a vibe.
+**congruence** (`r` + permutation test + dose-response), not raw KL.
+
+**One number isn't enough — measure robustness.** A single state-blind run can give
+`r ≈ +0.89` *or* `r ≈ −0.29` on similar data: the zero-initialised encoder either
+catches the `m_t` signal during optimisation or doesn't. So the honest claim is the
+**distribution of `r` across seeds**, not one run. `scripts/robustness_fused.py`
+trains N seeds on the same data and reports mean ± std, how many seeds are positive,
+and how many clear the significance bar:
+
+```cmd
+python scripts\robustness_fused.py --train data\fused\train.jsonl --seeds 5
+```
+
+(~20 min/seed on a 6 GB GPU; use `--seeds 3` to shorten.) If most seeds land clearly
+positive, the effect is real (report it with error bars); if they scatter, it was a
+lucky seed — and you say so. That distribution is what belongs in a paper.
 
 **Sharing it?** See [`MODEL_CARD.md`](MODEL_CARD.md) (an honest card for Hugging
 Face) and [`PUBLISHING.md`](PUBLISHING.md) (how to publish to HF, why Ollama can't
