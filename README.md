@@ -593,7 +593,13 @@ the same words come out different when the underlying valence, drives, or bonds
 differ (ADR 0005).
 
 It fits the same 6 GB card as Path A (0.5B + LoRA + a tiny MLP). Same install
-(step 0 above). The pipeline mirrors Path A but keeps `m_t` in the dataset:
+(step 0 above).
+
+**Windows one-shot:** `scripts\train_fused.bat` runs the whole pipeline below —
+collect fresh traces (with `m_t`), build the fused dataset, and train — in one
+command. (Edit the knobs at the top, e.g. `set EPOCHS=6`, to taste.)
+
+The pipeline mirrors Path A but keeps `m_t` in the dataset:
 
 ```bash
 # 1. prepare a *fused* dataset — each example keeps its m_t (own dir, so it
