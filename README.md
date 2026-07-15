@@ -698,26 +698,49 @@ the same words come out different when the underlying valence, drives, or bonds
 differ (ADR 0005).
 
 It fits the same 6 GB card as Path A (0.5B + LoRA + a tiny MLP). Same install
-(step 0 above).
+(step 0 above), plus — optional but recommended — a Hugging Face token so the base
+model downloads without the rate-limited "unauthenticated" warning: copy
+`.env.example` to `.env` and set `HF_TOKEN=hf_…` (a read-only token; `.env` is
+gitignored). It's loaded automatically at startup.
 
-**Windows one-shot:** `scripts\train_fused.bat` runs the whole pipeline below —
-collect fresh traces (with `m_t`), build the fused dataset, and train — in one
-command. (Edit the knobs at the top, e.g. `set EPOCHS=6`, to taste.)
+> ⚠️ **Fresh traces are required.** The fused model trains on the numeric `m_t`
+> (`state_vec`) stamped on each trace — a field added with this feature. Traces
+> collected *before* it (your Path-A batch) don't have it and are dropped. Collect
+> a new batch with the current code first.
 
-The pipeline mirrors Path A but keeps `m_t` in the dataset:
+**Windows one-shot:** `scripts\train_fused.bat` does the whole thing — collect
+fresh traces (into `data\traces_fused.jsonl`), verify they carry `m_t`, build the
+dataset, and train. Edit the knobs at the top (`set EPOCHS=6`, `set NPREFIX=16`,
+`set BACKEND=simulated` if Ollama isn't running).
 
-```bash
-# 1. prepare a *fused* dataset — each example keeps its m_t (own dir, so it
-#    doesn't overwrite the Path-A voice set)
-python scripts/prepare_data.py --traces data/traces.jsonl --out data/fused --fused
+Or step by step (tested end-to-end; Windows `cmd` shown — see the env-var note in
+*Command reference*):
 
-# 2. train the fused mind (LoRA + state encoder, end-to-end)
-python scripts/finetune_fused.py --train data/fused/train.jsonl --out models/sentiance-fused
+```cmd
+REM 1. collect a fresh batch that carries m_t (pass the path to --trace explicitly)
+set SENTIANCE_COGNITION_BACKEND=ollama
+python -m sentiance society --trace data\traces_fused.jsonl
+python -m sentiance live --as Iris --trace data\traces_fused.jsonl
+python -m sentiance chat --preset --as Rhea --trace data\traces_fused.jsonl
 
-# 3. use it — she now thinks *through* her own cognitive state
-#    (Windows cmd: set SENTIANCE_COGNITION_BACKEND=fused)
-SENTIANCE_COGNITION_BACKEND=fused python -m sentiance chat
+REM 2. (optional) confirm the traces carry state_vec — want a nonzero count
+python -c "import json;r=[json.loads(l) for l in open('data/traces_fused.jsonl',encoding='utf-8') if l.strip()];print('rows',len(r),'with state_vec',sum('state_vec' in x for x in r))"
+
+REM 3. build the fused dataset (keeps m_t; --fused drops any old rows without it)
+python scripts\prepare_data.py --traces data\traces_fused.jsonl --out data\fused --fused
+
+REM 4. train the fused mind (LoRA + state encoder, end-to-end) — prints device: cuda
+python scripts\finetune_fused.py --train data\fused\train.jsonl --out models\sentiance-fused --epochs 4
+
+REM 5. use it — she now thinks *through* her own cognitive state
+set SENTIANCE_COGNITION_BACKEND=fused
+python -m sentiance chat
 ```
+
+Already have a `data\traces.jsonl` with some fresh rows in it? Point step 3 at it
+directly — `--fused` keeps only the `state_vec`-carrying rows. A healthy run prints
+`examples: N (of N rows; dropped 0)` at step 4; if it says *"empty after
+tokenizing"* or *"wrong dim"*, your traces predate `state_vec` — collect fresh ones.
 
 The `fused` backend loads the base + LoRA + the trained encoder and conditions
 each thought on the **live** `m_t`; like every backend it **degrades to the
