@@ -752,18 +752,27 @@ the same conditioning bus.
 
 **Does `m_t` actually steer her?** In `chat`, state reaches the model *two* ways —
 as text in the prompt *and* as the `m_t` vector — so a chat alone can't tell them
-apart. To isolate the vector, run the ablation:
+apart. `scripts/eval_fused.py` isolates the vector with **deterministic, quantitative**
+metrics over a 12-state battery spanning the valence range:
 
 ```cmd
 python scripts\eval_fused.py --model models\sentiance-fused
 ```
 
-It holds the prompt identical and generates **greedily** with the real `m_t` vs. a
-zeroed `m_t` (plus a cross-state swap). If the outputs differ on most probes, the
-state encoder learned to steer generation — the hybrid is doing something the
-prompt text can't. If they're mostly identical, `m_t` isn't contributing yet (train
-longer, raise `--n-prefix`, or collect more varied data). It's a measurement, not a
-vibe.
+Holding the prompt identical and changing only the conditioning vector, it reports:
+1. **Prediction shift** — `KL(real ‖ zero)` at the next-token distribution vs. a
+   **shuffled-`m_t` control** (same values, structure destroyed): real ≫ shuffled
+   means the *learned mapping* steers, not noise.
+2. **Affect congruence** — Pearson **`r`** between the state's valence and how far
+   `m_t` pushes the output positive-vs-negative (a valence lexicon), with a
+   **sign-test p**. Positive `r` (and control `r ≈ 0`) = `m_t` injects *state-congruent*
+   affect the prompt text alone didn't.
+3. **Cross-state dose-response** — one fixed prompt, borrowed `m_t` swept across
+   states; the **slope** of output-affect on borrowed valence.
+
+It writes a markdown report to `eval/fused_eval.md`. A weak result (`r` near the
+control, low KL) means train longer, raise `--n-prefix`, or collect more varied data
+— it's a measurement, not a vibe.
 
 > **Still functional correlates only (ADR 0002).** Putting the state inside the
 > forward pass buys *integration and end-to-end learnability*, not phenomenal

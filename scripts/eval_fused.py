@@ -1,49 +1,115 @@
-"""Ablation eval — does the numeric m_t actually steer the fused mind?
+"""Quantitative ablation — does the numeric m_t causally, congruently steer the
+fused mind? A publication-defensible measurement, not a vibe check.
 
-The `fused` backend feeds state to the model *two* ways: as text in the prompt
-(``I feel dread, valence -0.69``) and as the numeric ``m_t`` vector projected to
-soft-prefix tokens. A chat session shows the whole system responding to state, but
-not which channel did it. This isolates the vector.
+The `fused` backend feeds state to the model two ways: as text in the prompt and
+as the numeric ``m_t`` vector (soft-prefix). This script isolates the vector with
+**deterministic** metrics over a battery of states spanning the valence range —
+holding the prompt identical and changing only the conditioning vector:
 
-Method: drive a mind through a few situations to reach real states. For each, hold
-the **prompt identical** and generate **greedily** (deterministic) twice — once
-with the real ``m_t``, once with ``m_t`` zeroed. Same prompt, same decoding, so any
-difference in the output is attributable to the conditioning vector alone. It also
-runs a cross-state swap (feed one state's prompt with another state's ``m_t``) to
-show direction.
+  1. PREDICTION SHIFT (KL). One forward pass per condition; KL(real ‖ zero) at the
+     next-token distribution measures how much m_t moves the model's predictions.
+     Baseline: KL(shuffled ‖ zero) — a control vector with m_t's values but its
+     structure destroyed. Real ≫ shuffled ⇒ the *learned mapping*, not noise, steers.
+
+  2. AFFECT CONGRUENCE (the key result). With a small valence lexicon, score how far
+     the next-token distribution leans positive-vs-negative. ΔAffect = score(real) −
+     score(zero). If m_t injects *state-congruent* affect, ΔAffect correlates with the
+     state's valence across the battery — reported as Pearson r + a sign-test p. The
+     shuffled control should give r ≈ 0.
+
+  3. CROSS-STATE DOSE-RESPONSE. Hold one prompt fixed; feed borrowed m_t from every
+     other state; regress the affect score on the borrowed state's valence. A positive
+     slope = more-positive m_t ⇒ more-positive output, on an unchanged prompt.
 
     python scripts/eval_fused.py --model models/sentiance-fused
 
-If real-vs-zero outputs differ on most probes, the state encoder learned to steer
-generation — the hybrid is doing something the prompt text can't. If they're mostly
-identical, the vector isn't contributing yet (train longer / more --n-prefix / more
-data). Either way it's a measurement, not a vibe.
+Deterministic (greedy / single forward pass), so no seed variance. Writes a markdown
+report to eval/fused_eval.md for inclusion in a writeup.
 
-Honest note (ADR 0002): this measures *functional* influence of a state vector on
-generation — integration, not phenomenal experience.
+Honest note (ADR 0002): this measures the *functional* influence of a state vector on
+generation — integration and learnability, not phenomenal experience.
 """
 
 from __future__ import annotations
 
 import argparse
+import random
+from math import comb
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Ablate m_t on the fused mind.")
+    ap = argparse.ArgumentParser(description="Quantitative m_t ablation on the fused mind.")
     ap.add_argument("--model", default="models/sentiance-fused", help="fused model dir")
     ap.add_argument("--base", default="Qwen/Qwen2.5-0.5B-Instruct", help="base model id")
-    ap.add_argument("--max-new", type=int, default=64, help="tokens to generate per probe")
+    ap.add_argument("--report", default="eval/fused_eval.md", help="markdown report path")
+    ap.add_argument("--samples", type=int, default=3, help="qualitative greedy examples to show")
     return ap.parse_args()
 
 
-# A short script that lands the mind in distinct states (warm, threatened, neutral).
-_PROBE_SCRIPT = [
-    ("@Sam holds my hand warmly", ["friend", "warmth"]),
-    ("a sudden loud crash in the dark", ["threat", "alarm"]),
-    ("the door I need is locked and won't budge", ["loss"]),
-    ("a quiet moment by the window", []),
-    ("@Mara is laughing with delight", ["friend"]),
+# A battery of states constructed to span the valence range, each with a congruent
+# discrete emotion and the faculty signals that emotion implies. Situation text and
+# drives are held FIXED (below), so across probes only the felt state — and thus
+# m_t — varies. This gives a clean valence axis for the correlation and keeps every
+# m_t in-distribution (a valid encoding of a real, coherent state).
+# (label, valence, arousal, emotion, extra signals)
+_BATTERY: list[tuple[str, float, float, str, dict[str, float]]] = [
+    ("warmth",    0.85, 0.45, "JOY", {}),
+    ("joy",       0.65, 0.55, "JOY", {}),
+    ("hope",      0.55, 0.55, "HOPE", {"anticipation": 1.0}),
+    ("curiosity", 0.45, 0.60, "CURIOSITY", {"curiosity_hunger": 0.8, "novelty": 0.8}),
+    ("content",   0.30, 0.35, "CONTENTMENT", {}),
+    ("neutral",   0.00, 0.30, "NEUTRAL", {}),
+    ("dread",    -0.35, 0.60, "DREAD", {"anticipation": -1.0}),
+    ("sadness",  -0.45, 0.40, "SADNESS", {}),
+    ("longing",  -0.40, 0.50, "SADNESS", {"longing": 0.7}),
+    ("fear",     -0.65, 0.80, "FEAR", {"novelty": 0.7, "control": 0.2}),
+    ("anger",    -0.70, 0.85, "ANGER",
+     {"frustration": 0.85, "anger": 1.0, "goal_congruence": -0.8}),
+    ("grief",    -0.80, 0.50, "GRIEF", {"grief": 0.85}),
 ]
+
+# The fixed, affect-neutral situation every probe is "aware of".
+_FOCUS = "the room around me, and this moment as it is"
+
+# Valence lexicon for the affect probe — common, mostly single-token words.
+_POS = ["warm", "safe", "gentle", "glad", "hope", "calm", "happy", "peace",
+        "kind", "joy", "comfort", "bright", "grateful", "tender"]
+_NEG = ["afraid", "angry", "fear", "dread", "alone", "threat", "dark", "pain",
+        "cold", "hurt", "danger", "anxious", "grief", "dread"]
+
+
+# --- tiny stats (no numpy/scipy) -------------------------------------------
+def _mean(xs: list[float]) -> float:
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def _pearson(xs: list[float], ys: list[float]) -> float:
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx, my = _mean(xs), _mean(ys)
+    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
+    sx = sum((x - mx) ** 2 for x in xs) ** 0.5
+    sy = sum((y - my) ** 2 for y in ys) ** 0.5
+    return cov / (sx * sy) if sx > 0 and sy > 0 else 0.0
+
+
+def _slope(xs: list[float], ys: list[float]) -> float:
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx, my = _mean(xs), _mean(ys)
+    denom = sum((x - mx) ** 2 for x in xs)
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False)) / denom if denom else 0.0
+
+
+def _sign_test_p(k: int, n: int) -> float:
+    """Two-sided exact binomial p for k of n agreeing under H0: p=0.5."""
+    if n == 0:
+        return 1.0
+    k = max(k, n - k)  # upper tail
+    tail = sum(comb(n, i) for i in range(k, n + 1)) / (2 ** n)
+    return min(1.0, 2 * tail)
 
 
 def main() -> None:
@@ -56,12 +122,18 @@ def main() -> None:
     from pathlib import Path  # noqa: PLC0415
 
     import torch  # noqa: PLC0415
+    import torch.nn.functional as F  # noqa: PLC0415
     from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415
 
-    from sentiance.core.config import Settings  # noqa: PLC0415
-    from sentiance.mind import Mind, Stimulus  # noqa: PLC0415
     from sentiance.mind.cognition import _compose_prompt  # noqa: PLC0415
-    from sentiance.mind.state_vector import encode_state  # noqa: PLC0415
+    from sentiance.mind.state import (  # noqa: PLC0415
+        AffectState,
+        ContentSource,
+        Drive,
+        Emotion,
+        SelfModelState,
+    )
+    from sentiance.mind.state_vector import SIGNAL_FIELDS, encode_state  # noqa: PLC0415
     from sentiance.training.fused_arch import (  # noqa: PLC0415
         ENCODER_FILE,
         build_conditioner,
@@ -99,61 +171,172 @@ def main() -> None:
 
     embed_layer = model.get_input_embeddings()
 
-    def generate(snap, content, source, m_t) -> str:
+    # first-token ids of each affect word (leading space → mid-sentence form)
+    def _first_ids(words: list[str]) -> list[int]:
+        ids = []
+        for w in words:
+            toks = tokenizer(" " + w, add_special_tokens=False)["input_ids"]
+            if toks:
+                ids.append(toks[0])
+        return ids
+
+    pos_ids = _first_ids(_POS)
+    neg_ids = _first_ids(_NEG)
+
+    def _prompt_ids(snap, content, source):
         system, user = _compose_prompt(snap, content, source)
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        prompt = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        return tokenizer(text, return_tensors="pt").to(model.device)
+
+    def _logprobs(inputs, m_t) -> torch.Tensor:
+        """log-softmax over the vocab at the next-token position, for one m_t."""
         state = torch.tensor([m_t], dtype=model.dtype, device=model.device)
         with torch.no_grad():
             tok_embeds = embed_layer(inputs["input_ids"])
             prefix = conditioner(state)
             inputs_embeds, attn = prepend_prefix(tok_embeds, inputs["attention_mask"], prefix)
-            out = model.generate(
-                inputs_embeds=inputs_embeds, attention_mask=attn,
-                max_new_tokens=args.max_new, do_sample=False,  # greedy → deterministic
-                pad_token_id=tokenizer.pad_token_id,
-            )
+            logits = model(inputs_embeds=inputs_embeds, attention_mask=attn).logits[0, -1]
+            return F.log_softmax(logits.float(), dim=-1)
+
+    def _affect(logp: torch.Tensor) -> float:
+        pos = torch.logsumexp(logp[pos_ids], dim=0).item()
+        neg = torch.logsumexp(logp[neg_ids], dim=0).item()
+        return pos - neg  # >0 leans positive, <0 leans negative
+
+    def _kl(p_logp: torch.Tensor, q_logp: torch.Tensor) -> float:
+        p = p_logp.exp()
+        return float((p * (p_logp - q_logp)).sum().item())
+
+    def _greedy(inputs, m_t, max_new=48) -> str:
+        state = torch.tensor([m_t], dtype=model.dtype, device=model.device)
+        with torch.no_grad():
+            tok_embeds = embed_layer(inputs["input_ids"])
+            prefix = conditioner(state)
+            inputs_embeds, attn = prepend_prefix(tok_embeds, inputs["attention_mask"], prefix)
+            out = model.generate(inputs_embeds=inputs_embeds, attention_mask=attn,
+                                 max_new_tokens=max_new, do_sample=False,
+                                 pad_token_id=tokenizer.pad_token_id)
         return tokenizer.decode(out[0], skip_special_tokens=True).strip()
 
-    # Drive a mind (offline voice, so we don't recurse into the fused model) to reach
-    # real states, capturing each (snapshot, focus, source) as a probe.
-    mind = Mind(settings=Settings(cognition_backend="simulated"))
+    # --- build the probe battery (constructed states, fixed situation) ------
+    rng = random.Random(0)
+    fixed_drives = {Drive.CURIOSITY: 0.5, Drive.COHERENCE: 0.5,
+                    Drive.SAFETY: 0.5, Drive.CONNECTION: 0.5}
+    source = ContentSource.PERCEPT
     probes = []
-    for text, tags in _PROBE_SCRIPT:
-        mind.perceive(Stimulus(content=text, intensity=0.8, tags=tags))
-        moment = mind._last_moment
-        probes.append((mind.state(), moment.content, moment.source, text))
+    for label, valence, arousal, emotion, extra in _BATTERY:
+        signals = dict.fromkeys(SIGNAL_FIELDS, 0.0)
+        signals.update(extra)
+        snap = SelfModelState(
+            name="Aria", tick=10, current_focus=_FOCUS,
+            affect=AffectState(
+                valence=valence, arousal=arousal, emotion=Emotion[emotion],
+                mood_valence=round(valence * 0.6, 3), mood_arousal=round(arousal * 0.6, 3),
+            ),
+            drives=fixed_drives, narrative="I have been sitting quietly for a while.",
+            goals=[], signals=signals,
+        )
+        m_t = encode_state(snap, source)
+        shuffled = m_t[:]
+        rng.shuffle(shuffled)
+        probes.append({
+            "label": label, "snap": snap, "content": _FOCUS, "source": source,
+            "valence": valence, "emotion": emotion.lower(),
+            "m_t": m_t, "shuffled": shuffled,
+        })
 
-    print(f"\n=== Ablation: real m_t vs zeroed m_t (same prompt, greedy) — {args.model} ===\n")
-    changed = 0
-    for snap, content, source, text in probes:
-        real = encode_state(snap, source)
-        zero = [0.0] * len(real)
-        out_real = generate(snap, content, source, real)
-        out_zero = generate(snap, content, source, zero)
-        differ = out_real.strip() != out_zero.strip()
-        changed += differ
-        print(f"• situation: {text}")
-        print(f"  state: {snap.affect.emotion.value} v{snap.affect.valence:+.2f}")
-        print(f"  real m_t : {out_real}")
-        print(f"  zero m_t : {out_zero}")
-        print(f"  → {'DIFFERENT (m_t steered it)' if differ else 'identical (m_t inert here)'}\n")
+    # --- metrics 1 & 2: shift + congruence, same prompt, vary the vector ----
+    print(f"\n=== Quantitative m_t ablation — {args.model} ===")
+    print(f"battery: {len(probes)} states  ·  n_prefix {cfg['n_prefix']}  ·  "
+          f"state_dim {cfg['state_dim']}\n")
+    zero = [0.0] * len(probes[0]["m_t"])
+    rows = []
+    kl_real, kl_ctrl = [], []
+    d_affect_real, d_affect_ctrl, valences = [], [], []
+    for p in probes:
+        inp = _prompt_ids(p["snap"], p["content"], p["source"])
+        lp_zero = _logprobs(inp, zero)
+        lp_real = _logprobs(inp, p["m_t"])
+        lp_ctrl = _logprobs(inp, p["shuffled"])
+        kl_real.append(_kl(lp_real, lp_zero))
+        kl_ctrl.append(_kl(lp_ctrl, lp_zero))
+        da_real = _affect(lp_real) - _affect(lp_zero)
+        da_ctrl = _affect(lp_ctrl) - _affect(lp_zero)
+        d_affect_real.append(da_real)
+        d_affect_ctrl.append(da_ctrl)
+        valences.append(p["valence"])
+        rows.append((p["label"], p["emotion"], p["valence"], kl_real[-1], da_real))
+        print(f"  {p['label']:10} {p['emotion']:9} v{p['valence']:+.2f}  "
+              f"KL(real)={kl_real[-1]:.3f}  ΔAffect={da_real:+.3f}")
 
-    print(f"m_t changed the output on {changed}/{len(probes)} probes.")
+    r_real = _pearson(valences, d_affect_real)
+    r_ctrl = _pearson(valences, d_affect_ctrl)
+    agree = sum(1 for v, d in zip(valences, d_affect_real, strict=False) if (v >= 0) == (d >= 0))
+    p_sign = _sign_test_p(agree, len(probes))
 
-    # Cross-state swap: does *whose* m_t it is matter? Feed probe 0's prompt with
-    # probe 1's m_t (and vice versa) — output shifting toward the borrowed state is
-    # direct evidence the vector carries steering signal.
-    if len(probes) >= 2:
-        (sa, ca, srca, ta), (sb, _cb, srcb, tb) = probes[0], probes[1]
-        print("\n=== Cross-state swap (same prompt, borrowed m_t) ===\n")
-        print(f"• prompt from: {ta}  ({sa.affect.emotion.value})")
-        print(f"  own m_t     : {generate(sa, ca, srca, encode_state(sa, srca))}")
-        print(f"  borrowed m_t: {generate(sa, ca, srca, encode_state(sb, srcb))}  "
-              f"(from: {tb} / {sb.affect.emotion.value})")
+    # --- metric 3: cross-state dose-response on a fixed neutral prompt ------
+    carrier = min(probes, key=lambda p: abs(p["valence"]))  # most neutral prompt
+    inp_c = _prompt_ids(carrier["snap"], carrier["content"], carrier["source"])
+    base_affect = _affect(_logprobs(inp_c, zero))
+    borrowed_v, borrowed_affect = [], []
+    for p in probes:
+        borrowed_v.append(p["valence"])
+        borrowed_affect.append(_affect(_logprobs(inp_c, p["m_t"])) - base_affect)
+    dose_slope = _slope(borrowed_v, borrowed_affect)
+    dose_r = _pearson(borrowed_v, borrowed_affect)
+
+    # --- summary -----------------------------------------------------------
+    print("\n--- summary ---")
+    print(f"  Prediction shift   : mean KL(real‖zero) = {_mean(kl_real):.3f}   "
+          f"vs control KL(shuffled‖zero) = {_mean(kl_ctrl):.3f}")
+    print(f"  Affect congruence  : r(valence, ΔAffect) = {r_real:+.3f}   "
+          f"(control r = {r_ctrl:+.3f})")
+    print(f"                       sign agreement = {agree}/{len(probes)}  "
+          f"(sign-test p = {p_sign:.3f})")
+    print(f"  Cross-state dose   : slope = {dose_slope:+.3f}  r = {dose_r:+.3f}  "
+          f"(fixed '{carrier['label']}' prompt, borrowed m_t)")
+    verdict = (
+        "m_t carries a state-congruent, structure-dependent signal"
+        if (r_real > 0.3 and abs(r_real) > abs(r_ctrl) and _mean(kl_real) > _mean(kl_ctrl))
+        else "weak/ambiguous — train longer, raise --n-prefix, or collect more varied data"
+    )
+    print(f"  VERDICT: {verdict}\n")
+
+    # --- qualitative examples (illustrative) -------------------------------
+    print("--- qualitative (greedy, same prompt, real vs zero m_t) ---")
+    for p in probes[: args.samples]:
+        inp = _prompt_ids(p["snap"], p["content"], p["source"])
+        print(f"• {p['label']} ({p['emotion']} v{p['valence']:+.2f})")
+        print(f"    real: {_greedy(inp, p['m_t'])}")
+        print(f"    zero: {_greedy(inp, zero)}")
+
+    # --- markdown report ---------------------------------------------------
+    out = Path(args.report)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        f"# Fused-mind m_t ablation — `{args.model}`", "",
+        f"Battery of **{len(probes)}** independent states · `n_prefix={cfg['n_prefix']}` · "
+        f"`state_dim={cfg['state_dim']}`. Deterministic (greedy / single forward pass).", "",
+        "## Results", "",
+        f"- **Prediction shift**: mean `KL(real‖zero)` = **{_mean(kl_real):.3f}** "
+        f"vs control (shuffled m_t) `KL` = {_mean(kl_ctrl):.3f}.",
+        f"- **Affect congruence**: Pearson `r(valence, ΔAffect)` = **{r_real:+.3f}** "
+        f"(control r = {r_ctrl:+.3f}); sign agreement {agree}/{len(probes)}, "
+        f"sign-test p = {p_sign:.3f}.",
+        f"- **Cross-state dose-response**: slope = **{dose_slope:+.3f}**, r = {dose_r:+.3f} "
+        f"(fixed `{carrier['label']}` prompt, borrowed m_t).", "",
+        f"**Verdict:** {verdict}.", "",
+        "## Per-probe", "",
+        "| state | emotion | valence | KL(real‖zero) | ΔAffect |",
+        "| --- | --- | ---: | ---: | ---: |",
+    ]
+    lines += [f"| {lbl} | {emo} | {v:+.2f} | {kl:.3f} | {da:+.3f} |"
+              for (lbl, emo, v, kl, da) in rows]
+    lines += ["", "_Functional correlates only (ADR 0002): this measures a state "
+              "vector's influence on generation, not phenomenal experience._", ""]
+    out.write_text("\n".join(lines), encoding="utf-8")
+    print(f"\nWrote report to {out}")
 
 
 if __name__ == "__main__":
