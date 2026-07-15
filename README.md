@@ -78,6 +78,100 @@ On top of the perception → affect → attention → memory → metacognition c
 | — | **Emotional carryover** | feelings persist through her own reflection, then ease — believable emotional arcs |
 | — | **Persistent identity** | all of the above saves to disk and reloads, so she is **continuous across runs** |
 
+## Command reference
+
+Every command in one place. The guided walkthroughs are in the sections below;
+this is the cheat sheet.
+
+> **Setting env vars** (backend, name, trace path…) differs by shell:
+> **Windows cmd** `set VAR=value` · **PowerShell** `$env:VAR="value"` ·
+> **macOS/Linux** `export VAR=value` (or inline: `VAR=value python -m sentiance …`).
+> All examples below use the `set` form; translate as needed.
+
+**Install**
+```bash
+python -m venv .venv                      # create a venv (use py -3.12 for training — see below)
+.venv\Scripts\activate.bat                # activate: Windows cmd
+source .venv/bin/activate                 # activate: macOS/Linux
+pip install -e ".[dev]"                    # runtime + tests
+pip install -e ".[finetune]"              # + training deps (Path A/B); then install CUDA torch (see Path A step 0)
+```
+
+**Run modes**
+```bash
+python -m sentiance                        # serve the HTTP API on :8000 (docs at /docs)
+python -m sentiance demo                   # a short scripted experience, printed
+python -m sentiance chat                   # interactive REPL — type experiences, watch her think
+python -m sentiance live                   # she lives in a small world (rooms, objects, day/night)
+python -m sentiance society                # several minds share the house, meet, talk, bond
+```
+
+**Flags** (chain them; `--as` is ignored by `society`)
+```bash
+python -m sentiance live --as Milo         # run a named nature (Iris/Milo/Rhea/Cass/Aria, or any name)
+python -m sentiance chat --preset          # play a curated hands-free scenario (varied emotions)
+python -m sentiance chat --trace           # log every deliberation to data\traces.jsonl (for training)
+python -m sentiance chat --preset --as Cass --trace   # collect a diverse batch in one go
+```
+
+**Choose the inner voice** (the `Cognition` backend)
+```bash
+set SENTIANCE_COGNITION_BACKEND=simulated  # default, offline, deterministic (no deps)
+set SENTIANCE_COGNITION_BACKEND=ollama     # local LLM via Ollama (e.g. qwen2.5:7b)
+set SENTIANCE_COGNITION_BACKEND=llm        # Anthropic (needs ANTHROPIC_API_KEY)
+set SENTIANCE_COGNITION_BACKEND=finetuned  # Path A: a small model trained on her voice
+set SENTIANCE_COGNITION_BACKEND=fused      # Path B: the fused, cognition-conditioned transformer
+```
+
+**Collect training data** (traces)
+```bash
+set SENTIANCE_COGNITION_BACKEND=ollama     # richer text than simulated (optional)
+set SENTIANCE_TRACE_PATH=data\traces.jsonl # where every deliberation is logged
+python -m sentiance society --trace
+python -m sentiance live --as Iris --trace
+python -m sentiance chat --preset --as Rhea --trace
+```
+
+**Path A — train the voice** (see *Fine-tune the voice*)
+```bash
+python scripts\prepare_data.py --traces data\traces.jsonl --out data
+python scripts\finetune.py --train data\train.jsonl --out models\sentiance-voice --epochs 4
+set SENTIANCE_COGNITION_BACKEND=finetuned
+python -m sentiance chat
+```
+Useful flags: `--agent Cass` (one character, not blended), `--similar-threshold 0.85`
+(near-echo dedup) for `prepare_data.py`; `--qlora`, `--base`, `--epochs` for `finetune.py`.
+
+**Path B — train the fused mind** (the hybrid; see *The fused mind*)
+```bash
+scripts\train_fused.bat                     # Windows: collect + prepare + train, one command
+```
+or by hand (any OS):
+```bash
+python scripts\prepare_data.py --traces data\traces_fused.jsonl --out data\fused --fused
+python scripts\finetune_fused.py --train data\fused\train.jsonl --out models\sentiance-fused --epochs 4
+set SENTIANCE_COGNITION_BACKEND=fused
+python -m sentiance chat
+```
+Useful flags for `finetune_fused.py`: `--n-prefix 16` (stronger conditioning),
+`--epochs`, `--base`. (Fresh traces required — old ones predate `state_vec`.)
+
+**HTTP API** (while `python -m sentiance` is serving)
+```bash
+curl -X POST localhost:8000/v1/perceive -H "Content-Type: application/json" -d "{\"content\":\"a warm hello\"}"
+curl -X POST localhost:8000/v1/idle      # advance one tick with no input (she wanders)
+curl localhost:8000/v1/self              # current self-model, mood, drives
+curl localhost:8000/docs                 # interactive API docs
+```
+
+**Develop**
+```bash
+python -m pytest                          # run the tests (use python -m pytest, not bare pytest)
+ruff check .                              # lint
+```
+
+Full env-var list is in **[Configuration](#configuration)**.
+
 ## Quickstart
 
 ### Install (choose your OS)
