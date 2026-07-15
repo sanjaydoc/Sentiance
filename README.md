@@ -19,6 +19,17 @@ continuous stream of consciousness.
 > Full rationale in **[ARCHITECTURE.md](ARCHITECTURE.md)** and
 > [ADR-0002](docs/adr/0002-functional-not-phenomenal.md).
 
+**Engine, or a hybrid you can train.** Out of the box Sentiance is a transparent
+*engine* — the faculties are inspectable code and the inner voice is a swappable
+LLM. But the architecture can also **train itself into a hybrid model**: run the
+mind, log every deliberation, and fine-tune a small transformer on its own stream.
+Two rungs — **Path A** distils the *voice* (`finetuned`), and **Path B**, the
+**fused mind**, feeds the *whole cognitive cycle as a numeric vector into the
+transformer*, trained end-to-end — a genuine neuro-symbolic hybrid where the
+faculties causally shape generation through weights, not prompt text. All of it
+fits a 6 GB laptop GPU. See *[Toward a "small sentient model"](#toward-a-small-sentient-model)*
+and *[The fused mind (Path B)](#the-fused-mind-path-b--a-cognition-conditioned-transformer)*.
+
 ## Grounding
 
 Each faculty implements a role from a theory of mind:
