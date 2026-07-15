@@ -1,3 +1,17 @@
+---
+license: apache-2.0
+base_model: Qwen/Qwen2.5-0.5B-Instruct
+library_name: peft
+pipeline_tag: text-generation
+tags:
+  - cognitive-architecture
+  - state-conditioning
+  - affective-computing
+  - lora
+  - sentiance
+  - functional-cognition
+---
+
 # Model card — Sentiance fused mind (`sentiance-fused`)
 
 A small language model **conditioned on a cognitive-architecture state vector**. It
