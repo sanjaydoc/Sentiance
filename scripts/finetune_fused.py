@@ -37,6 +37,9 @@ def parse_args() -> argparse.Namespace:
                     help="where to save adapter + encoder")
     ap.add_argument("--epochs", type=float, default=4.0)
     ap.add_argument("--lr", type=float, default=2e-4)
+    ap.add_argument("--enc-lr", type=float, default=1e-3,
+                    help="learning rate for the state encoder (higher than --lr: it "
+                         "starts zero-initialised and must learn the m_t→prefix map)")
     ap.add_argument("--accum", type=int, default=16, help="gradient accumulation steps")
     ap.add_argument("--maxlen", type=int, default=512, help="max sequence length")
     ap.add_argument("--lora-r", type=int, default=16)
@@ -84,6 +87,7 @@ def main() -> None:
     mode = "state in prompt (control)" if args.state_in_prompt else "state-blind (m_t only)"
     print(f"device: {device}  autocast: {'bf16' if bf16 else 'fp16' if on_cuda else 'off'}  "
           f"state_dim: {STATE_DIM}  n_prefix: {args.n_prefix}  mode: {mode}")
+    print(f"lr: {args.lr}  enc_lr: {args.enc_lr}  seed: {args.seed}")
     if not on_cuda:
         print("  ⚠ no CUDA GPU — training on CPU will be very slow. Install a CUDA "
               "torch build (see the README) to use your card.")
@@ -171,8 +175,15 @@ def main() -> None:
           f"dropped {sum(drops.values())})")
 
     embed_layer = model.get_input_embeddings()
-    trainable = [p for p in model.parameters() if p.requires_grad] + list(conditioner.parameters())
-    optim = torch.optim.AdamW(trainable, lr=args.lr)
+    lora_params = [p for p in model.parameters() if p.requires_grad]
+    enc_params = list(conditioner.parameters())
+    trainable = lora_params + enc_params
+    # The state encoder gets its own (higher) LR: it is tiny and zero-initialised,
+    # so it must climb faster than the LoRA to reliably learn the m_t→prefix map.
+    optim = torch.optim.AdamW([
+        {"params": lora_params, "lr": args.lr},
+        {"params": enc_params, "lr": args.enc_lr},
+    ])
     scaler = torch.amp.GradScaler("cuda", enabled=on_cuda and not bf16)
 
     steps_per_epoch = max(1, len(data) // args.accum)
