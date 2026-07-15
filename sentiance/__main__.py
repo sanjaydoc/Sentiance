@@ -10,11 +10,13 @@
 - ``python -m sentiance society``→ several minds share the house and meet, talk,
                                     and bond (emergent — only the world connects them)
 
-Flags (any mode): ``--as <Name>`` runs a named character preset (Iris/Milo/Rhea/
-Cass/Aria, or any name) — a one-word way to pick a nature instead of setting the
-temperament env vars by hand; ``--trace [path]`` logs deliberations for training
-(default ``data/traces.jsonl``). E.g. ``python -m sentiance live --as Milo --trace``.
-``--as`` is ignored by ``society`` (it has its own fixed cast).
+Flags: ``--as <Name>`` runs a named character preset (Iris/Milo/Rhea/Cass/Aria, or
+any name) — a one-word way to pick a nature instead of setting the temperament env
+vars by hand; ``--trace [path]`` logs deliberations for training (default
+``data/traces.jsonl``); ``--preset [name]`` (chat only) plays a curated scenario
+of varied situations hands-free (default ``varied``). E.g. collect a diverse batch
+with ``python -m sentiance chat --preset --as Milo --trace``. ``--as`` is ignored
+by ``society`` (it has its own fixed cast).
 """
 
 from __future__ import annotations
@@ -60,35 +62,38 @@ def run_demo() -> None:
     print(f"  narrative: {s.narrative}")
 
 
-def parse_cli(argv: list[str]) -> tuple[str, str | None, str | None]:
-    """Parse ``[command] [--as NAME] [--trace [PATH]]`` → (command, as_name, trace).
+def parse_cli(argv: list[str]) -> tuple[str, str | None, str | None, str | None]:
+    """Parse ``[command] [--as NAME] [--trace [PATH]] [--preset [NAME]]`` →
+    ``(command, as_name, trace, preset)``.
 
-    ``trace`` is ``None`` if the flag is absent, or the path if present (defaulting
-    to ``data/traces.jsonl`` when given bare). Pure and testable."""
+    ``trace``/``preset`` are ``None`` when the flag is absent, or the value if
+    present (defaulting to ``data/traces.jsonl`` / ``varied`` when given bare).
+    Pure and testable."""
     command = argv[0] if argv and not argv[0].startswith("-") else ""
     rest = argv[1:] if command else argv
     as_name: str | None = None
     trace: str | None = None
+    preset: str | None = None
     i = 0
     while i < len(rest):
         token = rest[i]
+        has_value = i + 1 < len(rest) and not rest[i + 1].startswith("-")
         if token == "--as" and i + 1 < len(rest):
             as_name = rest[i + 1]
             i += 2
         elif token == "--trace":
-            if i + 1 < len(rest) and not rest[i + 1].startswith("-"):
-                trace = rest[i + 1]
-                i += 2
-            else:
-                trace = "data/traces.jsonl"
-                i += 1
+            trace = rest[i + 1] if has_value else "data/traces.jsonl"
+            i += 2 if has_value else 1
+        elif token == "--preset":
+            preset = rest[i + 1] if has_value else "varied"
+            i += 2 if has_value else 1
         else:
             i += 1
-    return command, as_name, trace
+    return command, as_name, trace, preset
 
 
 def main() -> None:
-    command, as_name, trace = parse_cli(sys.argv[1:])
+    command, as_name, trace, preset = parse_cli(sys.argv[1:])
 
     # Flags set env vars; clear the settings cache so they take effect this run.
     if trace is not None:
@@ -110,7 +115,12 @@ def main() -> None:
     if command == "chat":
         from sentiance.chat import run_chat
 
-        run_chat()
+        script = None
+        if preset is not None:
+            from sentiance.scenarios import scenario
+
+            script = scenario(preset)
+        run_chat(script=script)
         return
     if command == "live":
         from sentiance.live import run_live

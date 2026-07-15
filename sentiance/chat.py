@@ -181,7 +181,11 @@ def _reflect(mind: Mind) -> None:
     _announce_self_judgment(mind)
 
 
-def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
+def run_chat(
+    mind: Mind | None = None,
+    persist_path: str | None = None,
+    script: list[str] | None = None,
+) -> None:
     # A mind we create persists to disk by default (durable identity across runs);
     # an injected mind (e.g. in tests) only persists if a path is given explicitly.
     owns_mind = mind is None
@@ -189,12 +193,19 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
     name = mind.settings.agent_name
     path = persist_path or (default_persist_path(mind.settings) if owns_mind else None)
 
+    # A script (a preset scenario) drives her through varied situations hands-free —
+    # each line behaves exactly as if typed, so it generates trace data unattended.
+    scripted = iter(script) if script is not None else None
+
     print(f"— {name} is awake (cognition: {mind.settings.cognition_backend}) —")
     if path:
         recovered = mind.load(path)
         if recovered:
             print(f"  …{name} remembers {recovered} moments from before.")
-    print("Type an experience, or :help. Ctrl-C to leave.\n")
+    if scripted is not None:
+        print(f"Playing a preset scenario ({len(script)} beats).\n")
+    else:
+        print("Type an experience, or :help. Ctrl-C to leave.\n")
 
     def _leave() -> None:
         if path:
@@ -204,12 +215,16 @@ def run_chat(mind: Mind | None = None, persist_path: str | None = None) -> None:
             print(f"— {name} rests —")
 
     while True:
-        try:
-            line = input("you> ")
-        except (EOFError, KeyboardInterrupt):
-            print()
-            _leave()
-            return
+        if scripted is not None:
+            line = next(scripted, ":quit")  # a preset scenario, played line by line
+            print(f"you> {line}")
+        else:
+            try:
+                line = input("you> ")
+            except (EOFError, KeyboardInterrupt):
+                print()
+                _leave()
+                return
 
         command, arg = parse_line(line)
         if command == "quit":

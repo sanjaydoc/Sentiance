@@ -456,8 +456,22 @@ python -m sentiance society --trace
 python -m sentiance live --as Iris --trace
 python -m sentiance live --as Milo --trace
 python -m sentiance live --as Cass --trace
-python -m sentiance chat --trace
+python -m sentiance chat --preset --trace
 ```
+
+**`--preset`** plays a curated **scenario** through `chat` hands-free — warmth,
+fear, curiosity, a blocked goal that turns to anger, a bond built then lost,
+empathy, hope/dread, sadness, sleep — so you don't type anything. One run yields
+~12 distinct emotions and several people met. Wear a different nature each time for
+contrast:
+
+```cmd
+python -m sentiance chat --preset --as Iris --trace
+python -m sentiance chat --preset --as Milo --trace
+python -m sentiance chat --preset --as Cass --trace
+```
+
+(Drop `--preset` to type your own situations instead — see the recipe below.)
 
 **Windows (PowerShell):** `$env:SENTIANCE_COGNITION_BACKEND="ollama"` then run the
 same `python -m sentiance … --trace` commands. (`--as`/`--trace` are shortcuts for
@@ -614,9 +628,10 @@ sentiance/
   live.py      # let the mind live in the world
   society.py   # several minds share the house, meet, talk, and bond
   characters.py# named temperament presets (Iris/Milo/Rhea/Cass/Aria) for --as
+  scenarios.py # curated chat scripts for hands-free data collection (--preset)
   trace.py     # export deliberations as a training dataset (Path A/B)
   training/    # dataset.py: traces → chat-format fine-tuning examples (pure Python)
-  __main__.py  # serve / demo / chat / live / society (+ --as, --trace)
+  __main__.py  # serve / demo / chat / live / society (+ --as, --trace, --preset)
 scripts/       # prepare_data.py + finetune.py (LoRA, 6 GB-tuned) — the [finetune] extra
 tests/         # 160 tests: faculties + cycle + HTTP + LLM/Ollama + chat + society + training
 docs/adr/      # decision records

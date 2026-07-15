@@ -7,17 +7,49 @@ from sentiance.characters import character_env
 
 
 def test_parse_cli_reads_command_and_flags() -> None:
-    assert parse_cli(["live", "--as", "Milo"]) == ("live", "Milo", None)
+    assert parse_cli(["live", "--as", "Milo"]) == ("live", "Milo", None, None)
     assert parse_cli(["chat", "--as", "Cass", "--trace", "d/x.jsonl"]) == (
-        "chat", "Cass", "d/x.jsonl",
+        "chat", "Cass", "d/x.jsonl", None,
     )
-    assert parse_cli([]) == ("", None, None)
+    assert parse_cli([]) == ("", None, None, None)
 
 
-def test_trace_flag_defaults_to_a_path_when_bare() -> None:
-    assert parse_cli(["society", "--trace"]) == ("society", None, "data/traces.jsonl")
-    # order-independent, and a following flag doesn't get swallowed as the path
-    assert parse_cli(["live", "--trace", "--as", "Rhea"]) == ("live", "Rhea", "data/traces.jsonl")
+def test_trace_and_preset_flags_default_when_bare() -> None:
+    assert parse_cli(["society", "--trace"]) == ("society", None, "data/traces.jsonl", None)
+    assert parse_cli(["chat", "--preset"]) == ("chat", None, None, "varied")
+    # order-independent; a following flag isn't swallowed as a value
+    assert parse_cli(["chat", "--as", "Cass", "--preset", "--trace"]) == (
+        "chat", "Cass", "data/traces.jsonl", "varied",
+    )
+
+
+def test_scenario_is_a_playable_script() -> None:
+    from sentiance.scenarios import scenario
+
+    lines = scenario("varied")
+    assert len(lines) > 20
+    assert lines[-1] == ":quit"  # ends by saving and leaving
+    assert any(line.startswith("@") for line in lines)  # has people
+    assert scenario("nope") == scenario()  # unknown → default
+
+
+def test_scripted_chat_plays_the_scenario_hands_free(tmp_path) -> None:
+    import io
+    from contextlib import redirect_stdout
+
+    from sentiance.chat import run_chat
+    from sentiance.core.config import Settings
+    from sentiance.mind import Mind
+    from sentiance.scenarios import scenario
+
+    mind = Mind(settings=Settings())
+    path = tmp_path / "aria.json"
+    with redirect_stdout(io.StringIO()):
+        run_chat(mind=mind, persist_path=str(path), script=scenario("varied"))
+
+    assert mind.tick_no > 20  # it ran the whole scenario
+    assert path.exists()  # saved on :quit
+    assert mind.relationships.known("Mara") is not None  # she met the people in it
 
 
 def test_a_preset_sets_name_and_temperament() -> None:
