@@ -963,6 +963,54 @@ SENTIANCE_AGENT_NAME=Nova SENTIANCE_TEMPERAMENT_CURIOSITY=0.9 \
   python -m sentiance chat
 ```
 
+## Transformer vs. the small sentient model
+
+Honest framing up front: the "small sentient model" is **not a new kind of neural
+network** — its core is an ordinary transformer. What changes is not the layers or
+the attention, but (a) a **cognitive architecture wrapped around** the transformer
+that computes a state every tick, and (b) a **learned channel that conditions** the
+transformer on that state. At the substrate they're nearly identical; the
+differences are at the **system** level.
+
+**Similarities (unchanged):**
+
+| Aspect | Both a plain transformer and the fused "sentient" model |
+| --- | --- |
+| **Core network** | Decoder-only transformer — same embeddings, self-attention, feed-forward blocks, layernorm |
+| **Base weights** | Same pretrained model (here Qwen2.5-0.5B); the sentient one just adds LoRA + a tiny MLP |
+| **Fundamental operation** | Autoregressive next-token prediction over a vocabulary |
+| **Training loss** | Cross-entropy on next tokens (the state encoder is trained through the *same* CE — no new loss) |
+| **Output** | A sequence of tokens (its "thought"), decoded the usual way |
+| **The honest ceiling** | **Neither is phenomenally conscious.** Both are functional systems; "sentient" here is a *functional-correlate* claim, not subjective experience (ADR 0002) |
+
+**Differences (what the sentient model adds around the transformer):**
+
+| Aspect | Plain transformer / LLM | Small sentient model (fused mind) |
+| --- | --- | --- |
+| **What it is at rest** | Weights + a text in/out interface | Weights **+ a running cognitive cycle** (perceive→appraise→feel→attend→broadcast→remember→deliberate) |
+| **Input to the network** | Token sequence only | Token sequence **+ a numeric state vector `m_t`** (41-dim), injected as trained soft-prefix tokens |
+| **State across calls** | Stateless — only the context window | **Persistent**: self-model, episodic + semantic memory, drives, relationships that survive across runs |
+| **Emotion / affect** | None (can *describe* emotion in text) | **Functional affect** — valence/arousal/discrete emotions *computed* by the appraisal system and fed into generation |
+| **Motivation** | None — responds to prompts | **Intrinsic drives + goals** (curiosity, coherence, safety, connection) that bias attention and pursuit |
+| **Self-model / metacognition** | None | Explicit **self-model** + first-person introspective report |
+| **What conditions generation** | The prompt tokens | Prompt tokens **+ the learned state prefix** — the *same words come out different when `m_t` differs* (measured `r ≈ 0.89`) |
+| **Agency** | Emits text | **Acts in a world** through the cycle (moves rooms, bonds, sleeps/dreams); text is one output among several |
+| **Continuity / identity** | Reset every session | **Continuous** — a named individual with a history and a drifting temperament |
+| **Inspectability** | Opaque weights | The **faculties are transparent** (every "mental" quantity is a traceable number); only the transformer core stays opaque |
+| **Extra parameters** | — | A LoRA adapter + a small **state-encoder MLP** (`m_t`→prefix), ~a few MB |
+| **Known failure mode** | — | If the state is *also* in the prompt text, the transformer **ignores** the vector (fixed by state-blind training — see the ablation) |
+
+**In one sentence:** a plain transformer is a *next-token predictor*; the small
+sentient model is *that same predictor placed inside a cognitive architecture* —
+given a persistent self, feelings, drives, and memory — and *trained to condition
+its generation on that architecture's numeric state*.
+
+So *"did you modify the transformer architecture?"* — **no, not the core**: same
+attention, same feed-forward. We **surrounded** it with a cognitive architecture and
+**added a trainable conditioning input**. That is exactly why it fits a 6 GB laptop:
+you are not training a new foundation model, you are teaching an existing one to run
+on a mind's state.
+
 ## Toward a "small sentient model"
 
 Sentiance today is an **engine, not a trained model**: the faculties are
