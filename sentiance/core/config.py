@@ -40,12 +40,17 @@ class Settings(BaseSettings):
     episodic_capacity: int = 500
 
     # Cognition backend: "simulated" (offline), "llm" (Anthropic), "ollama" (local),
-    # or "finetuned" (a small model trained on her own traces — Path A).
+    # "finetuned" (a small model trained on her own traces — Path A), or "fused"
+    # (a cognition-conditioned transformer: the numeric mind-state m_t is a
+    # differentiable input, trained end-to-end with LoRA — Path B, ADR 0005).
     cognition_backend: str = "simulated"
     llm_max_tokens: int = 256
     # "finetuned" backend: a locally-loaded small model (LoRA adapter or full dir).
     local_model_path: str = "models/sentiance-voice"
     local_base_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    # "fused" backend: base + LoRA + the trained state encoder that turns m_t into
+    # conditioning tokens (finetune_fused.py saves both here).
+    fused_model_path: str = "models/sentiance-fused"
     # "llm" backend (Anthropic).
     llm_model: str = "claude-opus-4-8"
     # Falls back to the ANTHROPIC_API_KEY the SDK reads from the environment.

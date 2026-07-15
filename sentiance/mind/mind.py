@@ -245,7 +245,37 @@ class Mind:
         s.goals = self.goals.descriptions()
         if self._companion is not None:
             s.heard = self.conversation.last(self._companion) or ""
+        s.signals = self._signals()
         return s
+
+    def _signals(self) -> dict[str, float]:
+        """The per-faculty scalars of the current tick, gathered from the live
+        faculties into one flat dict — the numeric side of the conscious moment.
+
+        Read-only: everything here was already computed during ``_tick`` (or has a
+        pure getter), so building it has no side effects and it reflects the tick
+        just broadcast. It is the raw material ``state_vector.encode_state`` turns
+        into ``m_t`` for the fused transformer (ADR 0005)."""
+        ap = self._appraisal
+        anticipation = 0.0
+        if self.last_anticipation is not None:
+            emo = self.last_anticipation[1]
+            anticipation = 1.0 if emo is Emotion.HOPE else -1.0 if emo is Emotion.DREAD else 0.0
+        return {
+            "novelty": round(ap.novelty, 3),
+            "goal_congruence": round(ap.goal_congruence, 3),
+            "control": round(ap.control, 3),
+            "relevance": round(ap.relevance, 3),
+            "frustration": round(self.frustration.level, 3),
+            "anger": 1.0 if self.last_anger else 0.0,
+            "longing": round(self.longing[1], 3) if self.longing is not None else 0.0,
+            "empathy": round(self.last_empathy[1], 3) if self.last_empathy is not None else 0.0,
+            "grief": round(sum((loss.intensity for loss in self.grief.losses), 0.0), 3),
+            "willpower": round(self.volition.effort, 3),
+            "effort": 1.0 if self.last_effort else 0.0,
+            "curiosity_hunger": round(self.curiosity.hunger(self.drives.levels), 3),
+            "anticipation": anticipation,
+        }
 
     def save(self, path: str) -> None:
         """Persist this mind's memory and inner state to disk (durable identity)."""

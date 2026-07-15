@@ -44,8 +44,12 @@ def load_traces(path: str | Path) -> list[dict]:
     return rows
 
 
-def to_chat_example(row: dict) -> dict | None:
-    """A trace row → an OpenAI-style chat example, or None if unusable."""
+def to_chat_example(row: dict, *, include_state: bool = False) -> dict | None:
+    """A trace row → an OpenAI-style chat example, or None if unusable.
+
+    With ``include_state``, attach the numeric ``m_t`` vector (``state``) for the
+    **fused** trainer — a row missing ``state_vec`` (an older Path-A trace) is
+    dropped, since it can't condition the transformer."""
     system = (row.get("system") or "").strip()
     prompt = (row.get("prompt") or "").strip()
     thought = (row.get("thought") or "").strip()
@@ -56,7 +60,13 @@ def to_chat_example(row: dict) -> dict | None:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
     messages.append({"role": "assistant", "content": thought})
-    return {"messages": messages}
+    example: dict = {"messages": messages}
+    if include_state:
+        state_vec = row.get("state_vec")
+        if not isinstance(state_vec, list) or not state_vec:
+            return None
+        example["state"] = [float(x) for x in state_vec]
+    return example
 
 
 def build_examples(
@@ -67,6 +77,7 @@ def build_examples(
     dedup: bool = True,
     similar_threshold: float = 0.85,
     window: int = 300,
+    include_state: bool = False,
 ) -> list[dict]:
     """Clean trace rows into chat examples: drop empties / trivially short
     thoughts, exact duplicates, and — the important one for conversation data —
@@ -88,7 +99,7 @@ def build_examples(
         thought = (row.get("thought") or "").strip()
         if len(thought.split()) < min_thought_words:
             continue
-        example = to_chat_example(row)
+        example = to_chat_example(row, include_state=include_state)
         if example is None:
             continue
         if dedup:
@@ -141,12 +152,17 @@ def prepare(
     similar_threshold: float = 0.85,
     val_frac: float = 0.1,
     seed: int = 0,
+    include_state: bool = False,
 ) -> dict:
-    """Full pipeline: traces → cleaned examples → train/val files. Returns stats."""
+    """Full pipeline: traces → cleaned examples → train/val files. Returns stats.
+
+    ``include_state=True`` builds the **fused** dataset — each example keeps its
+    numeric ``m_t`` (``state``) so a cognition-conditioned transformer can be
+    trained on it (ADR 0005). Rows lacking a ``state_vec`` are dropped."""
     rows = load_traces(traces_path)
     examples = build_examples(
         rows, agent=agent, min_thought_words=min_thought_words,
-        similar_threshold=similar_threshold,
+        similar_threshold=similar_threshold, include_state=include_state,
     )
     train, val = split(examples, val_frac=val_frac, seed=seed)
     out = Path(out_dir)
@@ -160,4 +176,5 @@ def prepare(
         "val": len(val),
         "by_agent": agent_counts(rows),
         "agent": agent,
+        "fused": include_state,
     }

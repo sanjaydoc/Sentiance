@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sentiance.mind.cognition import Cognition, OnToken, _compose_prompt
+from sentiance.mind.state_vector import encode_state
 
 if TYPE_CHECKING:
     from sentiance.mind.memory import Memory
@@ -97,7 +98,13 @@ class TracingCognition:
                         "drives": {d.value: round(v, 3) for d, v in self_model.drives.items()},
                         "goals": list(self_model.goals),
                         "heard": self_model.heard,
+                        "signals": dict(self_model.signals),
                     },
+                    # The whole cycle as one numeric vector — the differentiable
+                    # input the fused, cognition-conditioned transformer trains on
+                    # (state_vector.encode_state / ADR 0005). Path A ignores it;
+                    # Path B/the fused mind consumes it.
+                    "state_vec": [round(x, 4) for x in encode_state(self_model, source)],
                 }
             )
         return thought

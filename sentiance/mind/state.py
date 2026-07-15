@@ -209,3 +209,7 @@ class SelfModelState(BaseModel):
     goals: list[str] = Field(default_factory=list)  # active intentions, if any
     beliefs: list[str] = Field(default_factory=list)  # lessons distilled in sleep
     heard: str = ""  # the last thing a present companion said (for conversation)
+    # Per-faculty scalars of this moment (frustration, longing, curiosity-hunger…),
+    # folded in by the Mind so the whole cycle can be encoded as a numeric vector
+    # m_t for the fused, cognition-conditioned transformer (state_vector.py, ADR 0005).
+    signals: dict[str, float] = Field(default_factory=dict)

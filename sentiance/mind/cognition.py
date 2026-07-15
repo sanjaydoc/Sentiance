@@ -491,6 +491,14 @@ def build_cognition(settings: Settings) -> Cognition:
             base_model=settings.local_base_model,
             max_tokens=settings.llm_max_tokens,
         )
+    elif backend == "fused":
+        from sentiance.mind.fused_model import FusedCognition  # noqa: PLC0415 - lazy
+
+        base = FusedCognition(
+            model_path=settings.fused_model_path,
+            base_model=settings.local_base_model,
+            max_tokens=settings.llm_max_tokens,
+        )
     else:
         base = SimulatedCognition()
 
