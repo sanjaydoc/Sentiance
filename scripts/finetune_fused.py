@@ -100,29 +100,50 @@ def main() -> None:
     ).to(device)
 
     # Build supervised examples: mask the prompt, supervise only the thought.
+    # Crucially, keep the *whole completion* and trim the PROMPT from the left when
+    # the sequence is too long — Sentiance prompts carry a running narrative that
+    # can exceed maxlen, and truncating the tail would drop the thought we train on.
+    drops = {"no_state": 0, "bad_dim": 0, "empty_completion": 0}
+
     def encode(example: dict) -> dict | None:
         messages = example["messages"]
         state = example.get("state")
-        if state is None or len(state) != STATE_DIM:
+        if state is None:
+            drops["no_state"] += 1
+            return None
+        if len(state) != STATE_DIM:
+            drops["bad_dim"] += 1
             return None
         full = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)
         prompt_ids = tokenizer.apply_chat_template(
             messages[:-1], tokenize=True, add_generation_prompt=True
         )
-        full = full[: args.maxlen]
-        prompt_len = min(len(prompt_ids), len(full))
-        labels = [-100] * prompt_len + full[prompt_len:]
-        if all(t == -100 for t in labels):  # nothing to learn from
+        # The completion is what follows the prompt prefix (assistant thought + end).
+        completion = full[len(prompt_ids):] if len(full) > len(prompt_ids) else []
+        completion = completion[: args.maxlen]  # cap a runaway thought
+        if not completion:
+            drops["empty_completion"] += 1
             return None
-        return {"input_ids": full, "labels": labels, "state": [float(x) for x in state]}
+        max_prompt = max(0, args.maxlen - len(completion))
+        prompt_ids = prompt_ids[-max_prompt:] if max_prompt else []
+        input_ids = prompt_ids + completion
+        labels = [-100] * len(prompt_ids) + completion
+        return {"input_ids": input_ids, "labels": labels, "state": [float(x) for x in state]}
 
     with open(args.train, encoding="utf-8") as f:
         raw = [json.loads(line) for line in f if line.strip()]
     data = [e for e in (encode(r) for r in raw) if e is not None]
     if not data:
-        raise SystemExit(f"no usable fused examples in {args.train} — did you run "
-                         "prepare_data.py with --fused?")
-    print(f"examples: {len(data)}  (of {len(raw)} rows)")
+        raise SystemExit(
+            f"no usable fused examples in {args.train} "
+            f"(rows {len(raw)}; dropped — no state: {drops['no_state']}, "
+            f"wrong dim: {drops['bad_dim']}, empty after tokenizing: "
+            f"{drops['empty_completion']}). If 'no state' dominates, rebuild with "
+            "prepare_data.py --fused; if 'wrong dim', your traces predate the current "
+            "state vector — collect fresh ones."
+        )
+    print(f"examples: {len(data)}  (of {len(raw)} rows; "
+          f"dropped {sum(drops.values())})")
 
     embed_layer = model.get_input_embeddings()
     trainable = [p for p in model.parameters() if p.requires_grad] + list(conditioner.parameters())
