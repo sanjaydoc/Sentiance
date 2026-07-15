@@ -118,13 +118,18 @@ in the repo README and reproducible on a 6 GB laptop GPU.
 - Base model `Qwen/Qwen2.5-0.5B-Instruct`: **Apache-2.0** — retain its notice; this
   is a derivative. See the Qwen model card for details.
 
+## Author
+
+**Dr. Sanjay Anbu** — creator of Sentiance and the fused mind.
+Code & runtime: [github.com/sanjaydoc/Sentiance](https://github.com/sanjaydoc/Sentiance).
+
 ## Citation
 
 ```
 @software{sentiance_fused,
   title  = {Sentiance: a functional cognitive architecture with a
             cognition-conditioned language model (the fused mind)},
-  author = {Sentiance contributors},
+  author = {Anbu, Sanjay},
   year   = {2026},
   url    = {https://github.com/sanjaydoc/Sentiance}
 }
