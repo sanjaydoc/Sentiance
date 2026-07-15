@@ -163,7 +163,7 @@ def main() -> None:
     embed_layer = model.get_input_embeddings()
     trainable = [p for p in model.parameters() if p.requires_grad] + list(conditioner.parameters())
     optim = torch.optim.AdamW(trainable, lr=args.lr)
-    scaler = torch.cuda.amp.GradScaler(enabled=on_cuda and not bf16)
+    scaler = torch.amp.GradScaler("cuda", enabled=on_cuda and not bf16)
 
     steps_per_epoch = max(1, len(data) // args.accum)
     total_steps = int(steps_per_epoch * args.epochs)
