@@ -414,12 +414,32 @@ a 4th `Cognition` backend. Defaults target a **6 GB VRAM** card (RTX 30-series
 mobile): **Qwen2.5-0.5B** + LoRA, batch 1 × grad-accum 16, sequence 512, bf16,
 gradient checkpointing — a few GB and a few minutes of training.
 
-**0. Install the training extras** (once) plus a CUDA build of torch (see the note
-at the end so it uses your GPU):
+**0. Install the training extras** (once) plus a **CUDA build of torch** so it
+trains on your GPU rather than the CPU. The order matters — the extras pull a
+CPU-only torch as a dependency, so you install it *then replace* it:
 
 ```bash
 pip install -e ".[finetune]"
+
+# the line above installed a CPU-only torch — swap it for the CUDA build:
+pip uninstall -y torch torchvision torchaudio
+pip install torch --index-url https://download.pytorch.org/whl/cu124   # CUDA 12.x
+
+# verify — must print True:
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
+
+> **Two gotchas that will silently drop you back to the CPU:**
+> - **Use Python 3.11 or 3.12, not 3.13/3.14.** PyTorch ships no CUDA wheels for
+>   3.14 yet, so pip installs the CPU build and `cuda.is_available()` is `False`.
+>   On Windows: `py -3.12 -m venv .venv312` then activate that venv.
+> - **Uninstall the CPU torch *first*.** Re-running the `cu124` install over an
+>   existing torch reports "already satisfied" and changes nothing — remove it,
+>   then install.
+>
+> Pick the index URL for your CUDA from the
+> [PyTorch selector](https://pytorch.org/get-started/locally/) (`cu121`, `cu124`, …).
+> When it's right, `finetune.py` prints `device: cuda` on startup.
 
 **1. Collect a *diverse* dataset.** Quality beats quantity for a 0.5B: a few
 hundred **varied** deliberations — different situations, emotions, and people
@@ -524,8 +544,14 @@ sunny, **Rhea** even-keeled, **Aria** your lived-in default.
 every OS):
 
 ```bash
-python scripts/finetune.py --train data/train.jsonl --out models/sentiance-voice
+python scripts/finetune.py --train data/train.jsonl --out models/sentiance-voice --epochs 4
 ```
+
+On startup it prints the device it's using — you want `device: cuda`. On a 6 GB
+RTX 3000 (Turing) laptop card, ~450 blended examples × 4 epochs trains in
+**~20 minutes**; loss falls from ~2.5 toward ~1.0–1.5. (Turing has no native
+bf16, so torch emulates it — harmless; the run just prints `dtype: bf16`.) If it
+prints `device: cpu`, stop and fix torch (step 0) — a CPU run takes *hours*.
 
 **4. Use it** — she now thinks with the model trained on her own stream:
 
@@ -543,9 +569,8 @@ The `finetuned` backend loads in-process (GPU if CUDA is present — ~1 GB VRAM 
 generate — else CPU, slower but fine) and **degrades to the offline voice** if the
 extras or model aren't there, so nothing breaks.
 
-- **torch:** install the CUDA wheel from the
-  [PyTorch selector](https://pytorch.org/get-started/locally/) (e.g. the cu121
-  build) so training runs on your GPU, not the CPU.
+- **CPU-only / slow?** torch isn't the CUDA build — revisit step 0 (Python
+  ≤ 3.12, uninstall-then-reinstall from the CUDA index).
 - **Bigger base on the same card:** add `--qlora` (4-bit) to `finetune.py` and
   `pip install bitsandbytes` — fits a 1.5B base in 6 GB.
 - Point at a different base with `--base` / `SENTIANCE_LOCAL_BASE_MODEL`, or a
