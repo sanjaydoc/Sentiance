@@ -114,12 +114,23 @@ def main() -> None:
         if len(state) != STATE_DIM:
             drops["bad_dim"] += 1
             return None
-        full = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)
-        prompt_ids = tokenizer.apply_chat_template(
-            messages[:-1], tokenize=True, add_generation_prompt=True
+        # Render to TEXT first, then tokenize — transformers v5 makes
+        # apply_chat_template(tokenize=True) return a dict, not a token list, so
+        # slicing by length silently yields nothing. Text is version-proof.
+        prompt_text = tokenizer.apply_chat_template(
+            messages[:-1], tokenize=False, add_generation_prompt=True
         )
-        # The completion is what follows the prompt prefix (assistant thought + end).
-        completion = full[len(prompt_ids):] if len(full) > len(prompt_ids) else []
+        full_text = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=False
+        )
+        # The completion is the assistant turn — everything after the prompt prefix.
+        completion_text = (
+            full_text[len(prompt_text):]
+            if full_text.startswith(prompt_text)
+            else messages[-1]["content"]
+        )
+        prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+        completion = tokenizer(completion_text, add_special_tokens=False)["input_ids"]
         completion = completion[: args.maxlen]  # cap a runaway thought
         if not completion:
             drops["empty_completion"] += 1
