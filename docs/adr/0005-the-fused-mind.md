@@ -55,6 +55,17 @@ Add a `fused` cognition backend and its trainer.
   `fused_config.json` so backend and eval match), making `m_t` the *only* state
   channel. The state-in-prompt version is retained as the ablation's control.
 
+- **Two conditioning paths — `prefix` and `film`** (`--conditioning`). *Prefix*
+  prepends soft tokens at the input; it is shallow and the model can learn to ignore
+  it, which showed up as **high seed-to-seed variance** (`r` swinging +0.89 / +0.43 /
+  −0.29 on comparable data). *FiLM* injects a per-layer affine modulation
+  `h·(1+γ_i)+β_i` (from `m_t`) into **every** decoder block via forward hooks — the
+  state is part of the computation throughout depth, much harder to ignore. The base
+  weights stay frozen in both: this *alters the forward pass with trainable modules*,
+  it does not retrain a new transformer. `prefix` vs `film` is itself a clean ablation
+  ("shallow conditioning is unreliable; deep conditioning holds"). Honest stance
+  unchanged: deeper integration, not phenomenal experience (ADR 0002).
+
 Because the state rides a trainable conditioning bus, this is also the on-ramp to
 replacing individual Python faculties with small learned nets that feed the *same*
 bus — Path B proper.

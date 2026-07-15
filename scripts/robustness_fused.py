@@ -31,6 +31,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--base", default="Qwen/Qwen2.5-0.5B-Instruct")
     ap.add_argument("--epochs", type=float, default=4.0)
     ap.add_argument("--n-prefix", type=int, default=16)
+    ap.add_argument("--conditioning", choices=["prefix", "film"], default="prefix",
+                    help="conditioning path to test across seeds (film = per-layer γ/β)")
     ap.add_argument("--out-root", default="models/robust", help="per-seed model dirs go here")
     ap.add_argument("--report", default="eval/robustness.md", help="summary markdown path")
     return ap.parse_args()
@@ -62,7 +64,8 @@ def main() -> None:
             [sys.executable, "scripts/finetune_fused.py",
              "--train", args.train, "--out", str(model_dir),
              "--base", args.base, "--epochs", str(args.epochs),
-             "--n-prefix", str(args.n_prefix), "--seed", str(seed)],
+             "--n-prefix", str(args.n_prefix), "--conditioning", args.conditioning,
+             "--seed", str(seed)],
             check=False,
         )
         if train.returncode != 0:

@@ -27,6 +27,13 @@ from pathlib import Path
 ENCODER_FILE = "state_encoder.pt"
 CONFIG_FILE = "fused_config.json"
 
+# How m_t reaches the transformer:
+#   "prefix" — soft tokens prepended to the input (shallow; the model can ignore it)
+#   "film"   — per-layer affine (γ,β) modulation of hidden states (deep; injected
+#              throughout the stack, much harder to ignore — ADR 0005)
+CONDITIONING_PREFIX = "prefix"
+CONDITIONING_FILM = "film"
+
 
 def build_conditioner(state_dim: int, d_model: int, n_prefix: int = 8, hidden: int = 256):
     """A small MLP: ``m_t`` (B, state_dim) → ``n_prefix`` soft tokens (B, n_prefix,
@@ -73,11 +80,98 @@ def prepend_prefix(input_embeds, attention_mask, prefix_embeds):
     return fused, mask
 
 
+# --- FiLM: per-layer affine modulation of hidden states ---------------------
+
+
+def build_film(state_dim: int, d_model: int, n_layers: int, hidden: int = 256):
+    """An MLP: ``m_t`` (B, state_dim) → per-layer ``(γ, β)`` each (B, n_layers,
+    d_model). The output head is zero-initialised so an untrained FiLM is the
+    identity (``h·(1+0)+0``) and training grows the modulation from there."""
+    from torch import nn  # noqa: PLC0415
+
+    class FiLM(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.n_layers = n_layers
+            self.d_model = d_model
+            self.trunk = nn.Sequential(
+                nn.Linear(state_dim, hidden), nn.GELU(),
+                nn.Linear(hidden, hidden), nn.GELU(),
+            )
+            self.head = nn.Linear(hidden, n_layers * 2 * d_model)
+            nn.init.zeros_(self.head.weight)
+            nn.init.zeros_(self.head.bias)
+
+        def forward(self, state):  # (B, state_dim) → gamma, beta : (B, n_layers, d_model)
+            gb = self.head(self.trunk(state)).view(state.shape[0], self.n_layers, 2, self.d_model)
+            return gb[:, :, 0, :], gb[:, :, 1, :]
+
+    return FiLM()
+
+
+def find_decoder_layers(model):
+    """Locate the transformer's decoder-layer ``ModuleList`` (works through a PEFT
+    wrapper): the list whose entries carry a ``self_attn`` — i.e. the blocks."""
+    from torch import nn  # noqa: PLC0415
+
+    for module in model.modules():
+        if isinstance(module, nn.ModuleList) and len(module) >= 2 and all(
+            hasattr(layer, "self_attn") for layer in module
+        ):
+            return module
+    raise RuntimeError("could not locate decoder layers for FiLM conditioning")
+
+
+class FiLMController:
+    """Registers a forward hook on each decoder layer that modulates its hidden
+    states by ``h·(1+γ_i)+β_i`` using the currently-set ``(γ, β)``. Set them before
+    each forward; the hooks are part of the autograd graph, so gradients reach FiLM."""
+
+    def __init__(self, layers) -> None:
+        self._layers = list(layers)
+        self._handles: list = []
+        self._gamma = None
+        self._beta = None
+
+    @property
+    def n_layers(self) -> int:
+        return len(self._layers)
+
+    def set(self, gamma, beta) -> None:
+        self._gamma, self._beta = gamma, beta
+
+    def clear(self) -> None:
+        self._gamma = self._beta = None
+
+    def attach(self) -> FiLMController:
+        for idx, layer in enumerate(self._layers):
+            self._handles.append(layer.register_forward_hook(self._make_hook(idx)))
+        return self
+
+    def detach(self) -> None:
+        for handle in self._handles:
+            handle.remove()
+        self._handles = []
+
+    def _make_hook(self, idx: int):
+        def hook(module, args, output):
+            if self._gamma is None:
+                return output
+            hs = output[0] if isinstance(output, tuple) else output
+            g = self._gamma[:, idx, :].unsqueeze(1).to(hs.dtype)  # (B,1,d) broadcast over seq
+            b = self._beta[:, idx, :].unsqueeze(1).to(hs.dtype)
+            hs = hs * (1 + g) + b
+            return (hs, *tuple(output[1:])) if isinstance(output, tuple) else hs
+
+        return hook
+
+
 def save_config(out_dir: str | Path, *, state_dim: int, d_model: int, n_prefix: int,
-                hidden: int, base_model: str, state_blind: bool = True) -> None:
-    """Record the shapes needed to rebuild the conditioner at inference time, plus
-    ``state_blind`` — whether the model was trained with the felt state removed from
-    the prompt (so the backend/eval build the matching prompt)."""
+                hidden: int, base_model: str, state_blind: bool = True,
+                conditioning: str = CONDITIONING_PREFIX, n_layers: int = 0) -> None:
+    """Record everything needed to rebuild the conditioner at inference time:
+    shapes, ``state_blind`` (matching prompt), and ``conditioning`` (prefix|film,
+    with ``n_layers`` for film) so the backend/eval reconstruct the same wiring."""
     p = Path(out_dir)
     p.mkdir(parents=True, exist_ok=True)
     (p / CONFIG_FILE).write_text(
@@ -89,6 +183,8 @@ def save_config(out_dir: str | Path, *, state_dim: int, d_model: int, n_prefix: 
                 "hidden": hidden,
                 "base_model": base_model,
                 "state_blind": state_blind,
+                "conditioning": conditioning,
+                "n_layers": n_layers,
             },
             indent=2,
         ),

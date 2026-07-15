@@ -84,8 +84,12 @@ class FusedCognition:
             from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415
 
             from sentiance.training.fused_arch import (  # noqa: PLC0415
+                CONDITIONING_FILM,
                 ENCODER_FILE,
+                FiLMController,
                 build_conditioner,
+                build_film,
+                find_decoder_layers,
                 load_config,
             )
 
@@ -112,16 +116,26 @@ class FusedCognition:
                 model = PeftModel.from_pretrained(model, path)
             model.eval()
 
-            conditioner = build_conditioner(
-                state_dim=cfg["state_dim"], d_model=cfg["d_model"],
-                n_prefix=cfg["n_prefix"], hidden=cfg.get("hidden", 256),
-            )
+            kind = cfg.get("conditioning", "prefix")
+            controller = None
+            if kind == CONDITIONING_FILM:
+                layers = find_decoder_layers(model)
+                conditioner = build_film(
+                    state_dim=cfg["state_dim"], d_model=cfg["d_model"],
+                    n_layers=cfg.get("n_layers") or len(layers), hidden=cfg.get("hidden", 256),
+                )
+                controller = FiLMController(layers).attach()
+            else:
+                conditioner = build_conditioner(
+                    state_dim=cfg["state_dim"], d_model=cfg["d_model"],
+                    n_prefix=cfg["n_prefix"], hidden=cfg.get("hidden", 256),
+                )
             weights = torch.load(Path(path) / ENCODER_FILE, map_location="cpu")
             conditioner.load_state_dict(weights)
             conditioner.to(model.device).to(model.dtype)
             conditioner.eval()
 
-            self._loaded = (model, tokenizer, conditioner, torch, cfg)
+            self._loaded = (model, tokenizer, conditioner, torch, cfg, controller)
         except Exception:  # noqa: BLE001 - missing libs / model / encoder → fall back
             self._failed = True
             return None
@@ -134,7 +148,7 @@ class FusedCognition:
         moment_content: str,
         source: ContentSource,
     ) -> str:
-        model, tokenizer, conditioner, torch, cfg = loaded
+        model, tokenizer, conditioner, torch, cfg, controller = loaded
         from sentiance.training.fused_arch import prepend_prefix  # noqa: PLC0415
 
         # Match the prompt the model was trained on: a state-blind model gets its
@@ -148,25 +162,26 @@ class FusedCognition:
         )
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        # The live mind-state → soft prefix tokens (the fused conditioning).
-        m_t = encode_state(self_model, source)
+        m_t = encode_state(self_model, source)  # the live mind-state
         state = torch.tensor([m_t], dtype=model.dtype, device=model.device)
+        gen = {"max_new_tokens": self.max_tokens, "do_sample": True, "temperature": 0.8,
+               "top_p": 0.9, "pad_token_id": tokenizer.pad_token_id}
 
-        embed_layer = model.get_input_embeddings()
         with torch.no_grad():
-            tok_embeds = embed_layer(inputs["input_ids"])
+            if controller is not None:  # FiLM: modulate every layer, generate normally
+                gamma, beta = conditioner(state)
+                controller.set(gamma, beta)
+                out = model.generate(input_ids=inputs["input_ids"],
+                                     attention_mask=inputs["attention_mask"], **gen)
+                controller.clear()
+                new = out[0][inputs["input_ids"].shape[1]:]  # drop the prompt tokens
+                return tokenizer.decode(new, skip_special_tokens=True).strip()
+            # prefix: state → soft tokens prepended to the embeddings
+            tok_embeds = model.get_input_embeddings()(inputs["input_ids"])
             prefix = conditioner(state)
             inputs_embeds, attention_mask = prepend_prefix(
                 tok_embeds, inputs["attention_mask"], prefix
             )
-            out = model.generate(
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                max_new_tokens=self.max_tokens,
-                do_sample=True,
-                temperature=0.8,
-                top_p=0.9,
-                pad_token_id=tokenizer.pad_token_id,
-            )
+            out = model.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **gen)
         # With inputs_embeds, generate returns only the newly-generated tokens.
         return tokenizer.decode(out[0], skip_special_tokens=True).strip()

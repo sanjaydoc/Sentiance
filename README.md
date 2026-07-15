@@ -700,6 +700,16 @@ loss. So generation is *causally shaped* by the mind's state through weights —
 the same words come out different when the underlying valence, drives, or bonds
 differ (ADR 0005).
 
+**Prefix vs. FiLM conditioning (`--conditioning`).** `prefix` (default) prepends
+soft state-tokens at the input — shallow, and the model can learn to *ignore* it
+(which shows up as high seed-to-seed variance). `film` instead injects a per-layer
+affine modulation `h·(1+γ)+β` from `m_t` into **every** decoder block — the state is
+baked into the computation throughout depth, much harder to ignore, and expected to
+be stronger and more robust. Pass `--conditioning film` to *both* `finetune_fused.py`
+and (it's recorded in `fused_config.json`, so the backend/eval match automatically).
+The base weights stay frozen either way — this alters the forward pass with trainable
+modules, it does not retrain a new transformer.
+
 **State-blind by default (this is the crucial bit).** The fused dataset **strips
 the felt state out of the prompt text** — the model is told the *situation* but not
 that it "feels dread, valence −0.69." That state now arrives *only* as `m_t`. If you

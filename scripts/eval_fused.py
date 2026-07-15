@@ -160,8 +160,12 @@ def main() -> None:
     )
     from sentiance.mind.state_vector import SIGNAL_FIELDS, encode_state  # noqa: PLC0415
     from sentiance.training.fused_arch import (  # noqa: PLC0415
+        CONDITIONING_FILM,
         ENCODER_FILE,
+        FiLMController,
         build_conditioner,
+        build_film,
+        find_decoder_layers,
         load_config,
         prepend_prefix,
     )
@@ -186,13 +190,24 @@ def main() -> None:
         model = PeftModel.from_pretrained(model, args.model)
     model.eval()
 
-    conditioner = build_conditioner(
-        state_dim=cfg["state_dim"], d_model=cfg["d_model"],
-        n_prefix=cfg["n_prefix"], hidden=cfg.get("hidden", 256),
-    )
+    kind = cfg.get("conditioning", "prefix")
+    controller = None
+    if kind == CONDITIONING_FILM:
+        layers = find_decoder_layers(model)
+        conditioner = build_film(
+            state_dim=cfg["state_dim"], d_model=cfg["d_model"],
+            n_layers=cfg.get("n_layers") or len(layers), hidden=cfg.get("hidden", 256),
+        )
+        controller = FiLMController(layers).attach()
+    else:
+        conditioner = build_conditioner(
+            state_dim=cfg["state_dim"], d_model=cfg["d_model"],
+            n_prefix=cfg["n_prefix"], hidden=cfg.get("hidden", 256),
+        )
     conditioner.load_state_dict(torch.load(Path(args.model) / ENCODER_FILE, map_location="cpu"))
     conditioner.to(model.device).to(model.dtype)
     conditioner.eval()
+    print(f"conditioning: {kind}" + (f" over {controller.n_layers} layers" if controller else ""))
 
     embed_layer = model.get_input_embeddings()
 
@@ -222,10 +237,17 @@ def main() -> None:
         """log-softmax over the vocab at the next-token position, for one m_t."""
         state = torch.tensor([m_t], dtype=model.dtype, device=model.device)
         with torch.no_grad():
-            tok_embeds = embed_layer(inputs["input_ids"])
-            prefix = conditioner(state)
-            inputs_embeds, attn = prepend_prefix(tok_embeds, inputs["attention_mask"], prefix)
-            logits = model(inputs_embeds=inputs_embeds, attention_mask=attn).logits[0, -1]
+            if controller is not None:  # FiLM: modulate layers, forward with input_ids
+                gamma, beta = conditioner(state)
+                controller.set(gamma, beta)
+                logits = model(input_ids=inputs["input_ids"],
+                               attention_mask=inputs["attention_mask"]).logits[0, -1]
+                controller.clear()
+            else:
+                tok_embeds = embed_layer(inputs["input_ids"])
+                prefix = conditioner(state)
+                inputs_embeds, attn = prepend_prefix(tok_embeds, inputs["attention_mask"], prefix)
+                logits = model(inputs_embeds=inputs_embeds, attention_mask=attn).logits[0, -1]
             return F.log_softmax(logits.float(), dim=-1)
 
     def _affect(logp: torch.Tensor) -> float:
@@ -240,6 +262,16 @@ def main() -> None:
     def _greedy(inputs, m_t, max_new=48) -> str:
         state = torch.tensor([m_t], dtype=model.dtype, device=model.device)
         with torch.no_grad():
+            if controller is not None:  # FiLM
+                gamma, beta = conditioner(state)
+                controller.set(gamma, beta)
+                out = model.generate(input_ids=inputs["input_ids"],
+                                     attention_mask=inputs["attention_mask"],
+                                     max_new_tokens=max_new, do_sample=False,
+                                     pad_token_id=tokenizer.pad_token_id)
+                controller.clear()
+                new = out[0][inputs["input_ids"].shape[1]:]
+                return tokenizer.decode(new, skip_special_tokens=True).strip()
             tok_embeds = embed_layer(inputs["input_ids"])
             prefix = conditioner(state)
             inputs_embeds, attn = prepend_prefix(tok_embeds, inputs["attention_mask"], prefix)

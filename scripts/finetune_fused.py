@@ -44,7 +44,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--maxlen", type=int, default=512, help="max sequence length")
     ap.add_argument("--lora-r", type=int, default=16)
     ap.add_argument("--lora-alpha", type=int, default=32)
-    ap.add_argument("--n-prefix", type=int, default=16, help="soft state-tokens prepended")
+    ap.add_argument("--conditioning", choices=["prefix", "film"], default="prefix",
+                    help="how m_t reaches the transformer: prefix (soft tokens, shallow) "
+                         "or film (per-layer γ/β modulation, deep — harder to ignore)")
+    ap.add_argument("--n-prefix", type=int, default=16, help="soft state-tokens prepended (prefix)")
     ap.add_argument("--enc-hidden", type=int, default=256, help="state-encoder hidden width")
     ap.add_argument("--log-every", type=int, default=10)
     ap.add_argument("--seed", type=int, default=0,
@@ -71,11 +74,17 @@ def main() -> None:
 
     from sentiance.mind.state_vector import STATE_DIM  # noqa: PLC0415
     from sentiance.training.fused_arch import (  # noqa: PLC0415
+        CONDITIONING_FILM,
         ENCODER_FILE,
+        FiLMController,
         build_conditioner,
+        build_film,
+        find_decoder_layers,
         prepend_prefix,
         save_config,
     )
+
+    film = args.conditioning == CONDITIONING_FILM
 
     torch.manual_seed(args.seed)  # reproducible; vary --seed to test robustness
     on_cuda = torch.cuda.is_available()
@@ -113,9 +122,21 @@ def main() -> None:
     model.to(device)
 
     d_model = model.config.hidden_size
-    conditioner = build_conditioner(
-        state_dim=STATE_DIM, d_model=d_model, n_prefix=args.n_prefix, hidden=args.enc_hidden,
-    ).to(device)
+    if film:
+        layers = find_decoder_layers(model)
+        n_layers = len(layers)
+        conditioner = build_film(
+            state_dim=STATE_DIM, d_model=d_model, n_layers=n_layers, hidden=args.enc_hidden,
+        ).to(device)
+        controller = FiLMController(layers).attach()
+        print(f"conditioning: film over {n_layers} layers")
+    else:
+        n_layers = 0
+        controller = None
+        conditioner = build_conditioner(
+            state_dim=STATE_DIM, d_model=d_model, n_prefix=args.n_prefix, hidden=args.enc_hidden,
+        ).to(device)
+        print(f"conditioning: prefix ({args.n_prefix} tokens)")
 
     # Build supervised examples: mask the prompt, supervise only the thought.
     # Crucially, keep the *whole completion* and trim the PROMPT from the left when
@@ -207,13 +228,20 @@ def main() -> None:
 
             with torch.autocast(device_type="cuda" if on_cuda else "cpu",
                                 dtype=autocast_dtype, enabled=on_cuda):
-                tok_embeds = embed_layer(input_ids)
-                prefix = conditioner(state)
-                inputs_embeds, attn_mask = prepend_prefix(tok_embeds, attn, prefix)
-                pad = torch.full((1, args.n_prefix), -100, dtype=labels.dtype, device=device)
-                labels_full = torch.cat([pad, labels], dim=1)
-                out = model(inputs_embeds=inputs_embeds, attention_mask=attn_mask,
-                            labels=labels_full)
+                if film:
+                    # FiLM: modulate hidden states in every layer; no prefix, so the
+                    # normal input_ids / labels are used unchanged.
+                    gamma, beta = conditioner(state)
+                    controller.set(gamma, beta)
+                    out = model(input_ids=input_ids, attention_mask=attn, labels=labels)
+                else:
+                    tok_embeds = embed_layer(input_ids)
+                    prefix = conditioner(state)
+                    inputs_embeds, attn_mask = prepend_prefix(tok_embeds, attn, prefix)
+                    pad = torch.full((1, args.n_prefix), -100, dtype=labels.dtype, device=device)
+                    labels_full = torch.cat([pad, labels], dim=1)
+                    out = model(inputs_embeds=inputs_embeds, attention_mask=attn_mask,
+                                labels=labels_full)
                 loss = out.loss / args.accum
 
             scaler.scale(loss).backward()
@@ -240,7 +268,8 @@ def main() -> None:
     torch.save(conditioner.state_dict(), f"{args.out}/{ENCODER_FILE}")
     save_config(args.out, state_dim=STATE_DIM, d_model=d_model, n_prefix=args.n_prefix,
                 hidden=args.enc_hidden, base_model=args.base,
-                state_blind=not args.state_in_prompt)
+                state_blind=not args.state_in_prompt,
+                conditioning=args.conditioning, n_layers=n_layers)
     print(f"\nSaved fused model (adapter + state encoder) to {args.out}")
     print("Use it:  SENTIANCE_COGNITION_BACKEND=fused python -m sentiance chat")
 
