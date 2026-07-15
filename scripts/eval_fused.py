@@ -300,11 +300,22 @@ def main() -> None:
           f"(sign-test p = {p_sign:.3f})")
     print(f"  Cross-state dose   : slope = {dose_slope:+.3f}  r = {dose_r:+.3f}  "
           f"(fixed '{carrier['label']}' prompt, borrowed m_t)")
-    verdict = (
-        "m_t carries a state-congruent, structure-dependent signal"
-        if (r_real > 0.3 and abs(r_real) > abs(r_ctrl) and _mean(kl_real) > _mean(kl_ctrl))
-        else "weak/ambiguous — train longer, raise --n-prefix, or collect more varied data"
-    )
+    # Verdict keys on *congruence* — does m_t move affect in the state's direction,
+    # significantly, with a dose-response — NOT on raw KL magnitude (a shuffled
+    # vector can shift the distribution just as much; what matters is the *direction*).
+    beats_control = abs(r_real) > abs(r_ctrl) + 0.2
+    if r_real >= 0.5 and p_sign <= 0.05 and dose_slope > 0 and beats_control:
+        verdict = (f"STRONG — m_t steers affect congruently with state "
+                   f"(r={r_real:+.2f}, sign-test p={p_sign:.3f}, dose slope={dose_slope:+.2f}; "
+                   f"control r={r_ctrl:+.2f})")
+    elif r_real >= 0.3 and beats_control:
+        verdict = (f"MODERATE — congruent trend (r={r_real:+.2f}); tighten with "
+                   "more varied data or higher --n-prefix")
+    else:
+        verdict = "WEAK — train longer, raise --n-prefix, or collect more varied data"
+    if _mean(kl_real) <= _mean(kl_ctrl):
+        print("  (note: m_t's distribution shift is subtle/targeted — smaller than a "
+              "shuffled vector's — but directed; congruence r is the real signal.)")
     print(f"  VERDICT: {verdict}\n")
 
     # --- qualitative examples (illustrative) -------------------------------

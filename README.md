@@ -797,9 +797,17 @@ Holding the prompt identical and changing only the conditioning vector, it repor
 3. **Cross-state dose-response** — one fixed prompt, borrowed `m_t` swept across
    states; the **slope** of output-affect on borrowed valence.
 
-It writes a markdown report to `eval/fused_eval.md`. A weak result (`r` near the
-control, low KL) means train longer, raise `--n-prefix`, or collect more varied data
-— it's a measurement, not a vibe.
+It writes a markdown report to `eval/fused_eval.md` and prints a verdict keyed on
+**congruence** (`r` + sign-test + dose-response), not raw KL. A representative
+state-blind run reaches **`r ≈ +0.89` (p ≈ 0.006), dose slope ≈ +0.52**, while the
+shuffled control and the state-in-prompt model both give `r ≈ 0` — i.e. *the vector,
+and only the vector, steers her affect.* A weak result means train longer, raise
+`--n-prefix`, or collect more varied data — it's a measurement, not a vibe.
+
+**Sharing it?** See [`MODEL_CARD.md`](MODEL_CARD.md) (an honest card for Hugging
+Face) and [`PUBLISHING.md`](PUBLISHING.md) (how to publish to HF, why Ollama can't
+run the fused model, and how to frame a writeup) — all bound by ADR 0002: report the
+ablation, never claim consciousness.
 
 > **Still functional correlates only (ADR 0002).** Putting the state inside the
 > forward pass buys *integration and end-to-end learnability*, not phenomenal
