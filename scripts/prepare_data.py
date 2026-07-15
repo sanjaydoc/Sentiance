@@ -34,16 +34,26 @@ def main() -> None:
     ap.add_argument("--fused", action="store_true",
                     help="keep each example's numeric m_t for the fused, "
                          "cognition-conditioned transformer (finetune_fused.py)")
+    ap.add_argument("--state-in-prompt", action="store_true",
+                    help="(fused CONTROL) keep the felt state in the prompt text; "
+                         "default strips it so m_t is the model's only state channel")
     args = ap.parse_args()
 
+    # A real fused model is state-blind (m_t is the sole state channel); the
+    # --state-in-prompt control keeps the state in words (the ablation baseline).
+    state_blind = args.fused and not args.state_in_prompt
     stats = prepare(
         args.traces, args.out,
         agent=args.agent, min_thought_words=args.min_words,
         similar_threshold=args.similar_threshold, val_frac=args.val_frac, seed=args.seed,
-        include_state=args.fused,
+        include_state=args.fused, state_blind=state_blind,
     )
     by_agent = ", ".join(f"{name} {n}" for name, n in stats["by_agent"].items())
-    kind = "fused (with m_t)" if stats.get("fused") else "voice"
+    if stats.get("fused"):
+        kind = ("fused (m_t only)" if stats.get("state_blind")
+                else "fused (state in prompt — control)")
+    else:
+        kind = "voice"
     print(f"traces read: {stats['rows']}  (by agent: {by_agent})  ·  dataset: {kind}")
     who = f" for {stats['agent']}" if stats["agent"] else " (all agents blended)"
     print(

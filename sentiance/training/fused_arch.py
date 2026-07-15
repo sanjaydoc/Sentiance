@@ -74,8 +74,10 @@ def prepend_prefix(input_embeds, attention_mask, prefix_embeds):
 
 
 def save_config(out_dir: str | Path, *, state_dim: int, d_model: int, n_prefix: int,
-                hidden: int, base_model: str) -> None:
-    """Record the shapes needed to rebuild the conditioner at inference time."""
+                hidden: int, base_model: str, state_blind: bool = True) -> None:
+    """Record the shapes needed to rebuild the conditioner at inference time, plus
+    ``state_blind`` — whether the model was trained with the felt state removed from
+    the prompt (so the backend/eval build the matching prompt)."""
     p = Path(out_dir)
     p.mkdir(parents=True, exist_ok=True)
     (p / CONFIG_FILE).write_text(
@@ -86,6 +88,7 @@ def save_config(out_dir: str | Path, *, state_dim: int, d_model: int, n_prefix: 
                 "n_prefix": n_prefix,
                 "hidden": hidden,
                 "base_model": base_model,
+                "state_blind": state_blind,
             },
             indent=2,
         ),

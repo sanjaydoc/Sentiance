@@ -46,6 +46,15 @@ Add a `fused` cognition backend and its trainer.
   to the offline voice, like every other backend. Selected via
   `SENTIANCE_COGNITION_BACKEND=fused`.
 
+- **State-blind prompting (learned the hard way).** A first version left the felt
+  state in the prompt text *and* fed `m_t`. A quantitative ablation
+  (`scripts/eval_fused.py`) showed the vector was **inert** — `KL(real‖zero) ≈ 0`,
+  `r ≈ 0` — because the prompt already stated the emotion in words, so the model had
+  no gradient pressure to use the redundant vector. The fix: **strip the felt state
+  from the prompt** for the fused model (`state_blind`, recorded in
+  `fused_config.json` so backend and eval match), making `m_t` the *only* state
+  channel. The state-in-prompt version is retained as the ablation's control.
+
 Because the state rides a trainable conditioning bus, this is also the on-ramp to
 replacing individual Python faculties with small learned nets that feed the *same*
 bus — Path B proper.

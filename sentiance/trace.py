@@ -84,12 +84,16 @@ class TracingCognition:
         thought = self.inner.deliberate(moment_content, source, self_model, memory, on_token)
         if thought is not None:
             system, user = _compose_prompt(self_model, moment_content, source)
+            _, user_blind = _compose_prompt(self_model, moment_content, source, state_blind=True)
             affect = self_model.affect
             self.writer.write(
                 {
                     "agent": self_model.name,
                     "system": system,
                     "prompt": user,
+                    # The same prompt with the felt state removed — for training the
+                    # fused mind, whose state arrives only as the m_t vector (ADR 0005).
+                    "prompt_blind": user_blind,
                     "thought": thought.content,
                     "state": {
                         "focus": moment_content,

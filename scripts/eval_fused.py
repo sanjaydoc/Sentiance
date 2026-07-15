@@ -183,8 +183,12 @@ def main() -> None:
     pos_ids = _first_ids(_POS)
     neg_ids = _first_ids(_NEG)
 
+    state_blind = cfg.get("state_blind", False)
+
     def _prompt_ids(snap, content, source):
-        system, user = _compose_prompt(snap, content, source)
+        # Match training: a state-blind model's prompt omits the felt state, so m_t
+        # is the only channel — exactly what this ablation is measuring.
+        system, user = _compose_prompt(snap, content, source, state_blind=state_blind)
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         return tokenizer(text, return_tensors="pt").to(model.device)

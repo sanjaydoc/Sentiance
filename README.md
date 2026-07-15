@@ -698,6 +698,15 @@ loss. So generation is *causally shaped* by the mind's state through weights —
 the same words come out different when the underlying valence, drives, or bonds
 differ (ADR 0005).
 
+**State-blind by default (this is the crucial bit).** The fused dataset **strips
+the felt state out of the prompt text** — the model is told the *situation* but not
+that it "feels dread, valence −0.69." That state now arrives *only* as `m_t`. If you
+leave the state in the prompt, the model just reads it from the words and **ignores
+the vector** (we measured exactly this — see the ablation below); removing it forces
+the encoder to learn. `prepare_data.py --fused` is state-blind automatically; add
+`--state-in-prompt` (to *both* `prepare_data.py` and `finetune_fused.py`) to build
+the redundant **control** for the ablation.
+
 It fits the same 6 GB card as Path A (0.5B + LoRA + a tiny MLP). Same install
 (step 0 above), plus — optional but recommended — a Hugging Face token so the base
 model downloads without the rate-limited "unauthenticated" warning: copy

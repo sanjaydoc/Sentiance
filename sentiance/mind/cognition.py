@@ -193,12 +193,35 @@ _SYSTEM_TEMPLATE = (
 
 
 def _compose_prompt(
-    self_model: SelfModelState, moment_content: str, source: ContentSource
+    self_model: SelfModelState,
+    moment_content: str,
+    source: ContentSource,
+    *,
+    state_blind: bool = False,
 ) -> tuple[str, str]:
-    """Build the (system, user) prompt shared by every LLM cognition backend."""
+    """Build the (system, user) prompt shared by every LLM cognition backend.
+
+    ``state_blind`` strips the felt state (emotion, drives, goals, what was heard)
+    out of the prompt, leaving only the bare situation + narrative. The **fused**
+    mind uses this: its state arrives *only* as the numeric ``m_t`` vector, so the
+    model must read the vector to know how it feels rather than copying the words
+    (ADR 0005). Removing the prompt/vector redundancy is what forces the model to
+    actually condition on ``m_t``."""
+    system = _SYSTEM_TEMPLATE.format(name=self_model.name)
+    situation = (
+        f"Right now I am aware of: {moment_content}\n"
+        f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
+    )
+    if state_blind:
+        user = (
+            f"{situation}"
+            f"Recent stream: {self_model.narrative}\n"
+            "My next thought is:"
+        )
+        return system, user
+
     affect = self_model.affect
     drives = ", ".join(f"{d.value} {v:.2f}" for d, v in self_model.drives.items())
-    system = _SYSTEM_TEMPLATE.format(name=self_model.name)
     goals = "; ".join(self_model.goals) if self_model.goals else "none right now"
     # Keep the live conversation in view so the reply picks up the thread — but
     # steer it *forward* with a rotating "move" and an explicit no-echo rule, so
@@ -211,8 +234,7 @@ def _compose_prompt(
         else ""
     )
     user = (
-        f"Right now I am aware of: {moment_content}\n"
-        f"(this arose as {_SOURCE_PHRASE.get(source, 'something')}).\n"
+        f"{situation}"
         f"I feel {affect.emotion.value} — valence {affect.valence:+.2f}, "
         f"arousal {affect.arousal:.2f}.\n"
         f"My drives: {drives}.\n"

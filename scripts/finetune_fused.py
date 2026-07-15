@@ -41,9 +41,13 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--maxlen", type=int, default=512, help="max sequence length")
     ap.add_argument("--lora-r", type=int, default=16)
     ap.add_argument("--lora-alpha", type=int, default=32)
-    ap.add_argument("--n-prefix", type=int, default=8, help="soft state-tokens prepended")
+    ap.add_argument("--n-prefix", type=int, default=16, help="soft state-tokens prepended")
     ap.add_argument("--enc-hidden", type=int, default=256, help="state-encoder hidden width")
     ap.add_argument("--log-every", type=int, default=10)
+    ap.add_argument("--state-in-prompt", action="store_true",
+                    help="record that this run's data keeps the state in the prompt "
+                         "(the control); default marks it state-blind (m_t only). "
+                         "Must match how prepare_data.py built the dataset.")
     return ap.parse_args()
 
 
@@ -72,8 +76,9 @@ def main() -> None:
     bf16 = on_cuda and torch.cuda.is_bf16_supported()
     device = "cuda" if on_cuda else "cpu"
     autocast_dtype = torch.bfloat16 if bf16 else torch.float16
+    mode = "state in prompt (control)" if args.state_in_prompt else "state-blind (m_t only)"
     print(f"device: {device}  autocast: {'bf16' if bf16 else 'fp16' if on_cuda else 'off'}  "
-          f"state_dim: {STATE_DIM}  n_prefix: {args.n_prefix}")
+          f"state_dim: {STATE_DIM}  n_prefix: {args.n_prefix}  mode: {mode}")
     if not on_cuda:
         print("  ⚠ no CUDA GPU — training on CPU will be very slow. Install a CUDA "
               "torch build (see the README) to use your card.")
@@ -218,7 +223,8 @@ def main() -> None:
     tokenizer.save_pretrained(args.out)
     torch.save(conditioner.state_dict(), f"{args.out}/{ENCODER_FILE}")
     save_config(args.out, state_dim=STATE_DIM, d_model=d_model, n_prefix=args.n_prefix,
-                hidden=args.enc_hidden, base_model=args.base)
+                hidden=args.enc_hidden, base_model=args.base,
+                state_blind=not args.state_in_prompt)
     print(f"\nSaved fused model (adapter + state encoder) to {args.out}")
     print("Use it:  SENTIANCE_COGNITION_BACKEND=fused python -m sentiance chat")
 

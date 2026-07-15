@@ -134,10 +134,14 @@ class FusedCognition:
         moment_content: str,
         source: ContentSource,
     ) -> str:
-        model, tokenizer, conditioner, torch, _cfg = loaded
+        model, tokenizer, conditioner, torch, cfg = loaded
         from sentiance.training.fused_arch import prepend_prefix  # noqa: PLC0415
 
-        system, user = _compose_prompt(self_model, moment_content, source)
+        # Match the prompt the model was trained on: a state-blind model gets its
+        # state only from m_t, so the prompt must omit the felt-state text.
+        system, user = _compose_prompt(
+            self_model, moment_content, source, state_blind=cfg.get("state_blind", False)
+        )
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         prompt = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
