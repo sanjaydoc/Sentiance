@@ -736,6 +736,41 @@ in the *scaffolding*, so the valuable version keeps the faculties transparent an
 only learns the parts that benefit — the voice, or a single organ — rather than
 melting everything into opaque weights.
 
+## Roadmap
+
+**Shipped**
+- The cognitive cycle — perceive → appraise → feel → attend → **broadcast** →
+  remember / update self-model / reflect → learn → deliberate, with mind-wandering.
+- 18 faculties (see the table above): goals, world & embodiment, associative
+  memory, sleep/consolidation, relationships, temperament (+drift), imagination,
+  curiosity, self-conscious emotions, frustration→anger, attachment, empathy,
+  grief, dreaming, volition, felt time, conversational memory.
+- A multi-mind **society** (meet · talk · bond · part · reunite) + named-character
+  presets and hands-free `--preset` scenarios.
+- Persistent identity; the LLM voice behind a swappable port (offline · Ollama ·
+  Anthropic · **finetuned**).
+- **Path A pipeline** — trace export → dataset prep (dedup + near-echo filtering,
+  optional per-agent) → 6 GB-tuned LoRA trainer → the `finetuned` backend.
+
+**Now — Path A: train the voice.** Collect diverse traces, fine-tune a small base
+(Qwen2.5-0.5B) on the blended data, drop the result in as `finetuned`. Iterate on
+data volume / epochs / a 1.5B QLoRA base.
+
+**Next — Path B: learn the organs.** Replace a hand-coded organ — starting with
+**appraisal** — with a small network trained on the `state` field of the same
+traces, so her *reactions* are learned rather than tuned while the architecture
+stays transparent and inspectable.
+
+**Later (candidates)**
+- *Path C* — an RL agent whose reward is its own drives/needs (learned behaviour
+  in the house, not scripted movement).
+- Deeper society — minds that quote each other across time, a shared event (a
+  storm) they weather together, softening the anxious-bond asymmetry.
+- An evaluation harness comparing the `finetuned` voice against qwen/Claude.
+
+Throughout: **functional correlates, never a claim of phenomenal consciousness**
+([ADR-0002](docs/adr/0002-functional-not-phenomenal.md)).
+
 ## Development
 
 ```bash
